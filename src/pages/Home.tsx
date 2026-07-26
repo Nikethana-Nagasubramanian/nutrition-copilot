@@ -529,7 +529,10 @@ function AskBar({ label, value, target, unit, color }: { label: string; value: n
         </span>
       </div>
       <div className="mt-1 h-2 overflow-hidden rounded-full bg-neutral-100">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${progress}%` }} />
+        <div
+          className={`h-full w-full origin-left rounded-full ${color} transition-transform duration-300 ease-strong`}
+          style={{ transform: `scaleX(${progress / 100})` }}
+        />
       </div>
     </div>
   );

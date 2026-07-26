@@ -38,7 +38,10 @@ export function MacroSummary({ totals, targets, showingLabel, onClearShowing }: 
                 </div>
               </div>
               <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-neutral-100">
-                <div className={`h-full rounded-full ${item.color}`} style={{ width: `${progress}%` }} />
+                <div
+                  className={`h-full w-full origin-left rounded-full ${item.color} transition-transform duration-300 ease-strong`}
+                  style={{ transform: `scaleX(${progress / 100})` }}
+                />
               </div>
             </div>
           );
