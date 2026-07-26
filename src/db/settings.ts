@@ -15,7 +15,7 @@ const DEFAULT_OLLAMA_CONFIG: OllamaConfig = {
   enabled: false,
   baseUrl: '',
   model: 'llama3.1',
-  timeoutMs: 4000,
+  timeoutMs: 20000,
 };
 
 export async function getDailyTargets(): Promise<DailyTargets> {

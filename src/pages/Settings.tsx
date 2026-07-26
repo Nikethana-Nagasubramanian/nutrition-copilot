@@ -33,7 +33,7 @@ export default function Settings() {
     enabled: false,
     baseUrl: '',
     model: 'llama3.1',
-    timeoutMs: 4000,
+    timeoutMs: 20000,
   });
   const [ollamaSaved, setOllamaSaved] = useState(false);
   const [ollamaTest, setOllamaTest] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
@@ -161,6 +161,21 @@ export default function Settings() {
               value={ollama.model}
               onChange={(e) => setOllama((o) => ({ ...o, model: e.target.value }))}
             />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-neutral-500">Timeout (ms)</label>
+            <input
+              className="mt-1 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              inputMode="numeric"
+              placeholder="20000"
+              value={String(ollama.timeoutMs)}
+              onChange={(e) => setOllama((o) => ({ ...o, timeoutMs: Number(e.target.value) || 0 }))}
+            />
+            <p className="mt-1 text-[11px] text-neutral-400">
+              How long to wait for Ollama before falling back to the cloud. Raise this if the model needs to cold-load
+              (e.g. 20000 = 20s).
+            </p>
           </div>
 
           <div className="flex gap-2">
