@@ -38,6 +38,14 @@ select {
   font: inherit;
 }
 
+button {
+  transition: transform 160ms var(--ease-strong);
+}
+
+button:not(:disabled):not([data-no-press]):active {
+  transform: scale(0.97);
+}
+
 input,
 textarea,
 select {

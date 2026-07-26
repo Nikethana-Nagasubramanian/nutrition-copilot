@@ -324,6 +324,7 @@ export default function Home() {
                     </button>
                   </div>
                   <button
+                    data-no-press
                     className="relative w-full rounded-xl bg-white px-2 py-2 text-left transition-transform duration-300"
                     style={{ transform: `translateX(${actionsOpenId === e.id ? -92 : touchDeltaX}px)` }}
                     onClick={() => {
