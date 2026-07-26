@@ -53,3 +53,10 @@ export interface AskNutritionResult {
   summary: string;
   suggestion?: string | null;
 }
+
+export interface OllamaConfig {
+  enabled: boolean;
+  baseUrl: string; // e.g. https://desktop.tailXXXX.ts.net or http://100.x.y.z:11434
+  model: string; // e.g. llama3.1
+  timeoutMs: number;
+}

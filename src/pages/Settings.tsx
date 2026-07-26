@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getDailyTargets, setDailyTargets } from '../db/settings';
+import { getDailyTargets, setDailyTargets, getOllamaConfig, setOllamaConfig } from '../db/settings';
 import { clearDevLogs, getDevLogs, type DevLogEntry } from '../services/devLogs';
-import type { DailyTargets } from '../types/nutrition';
+import type { DailyTargets, OllamaConfig } from '../types/nutrition';
 
 interface RangeFields {
   min: string;
@@ -29,6 +29,14 @@ export default function Settings() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saved, setSaved] = useState(false);
   const [logs, setLogs] = useState<DevLogEntry[]>([]);
+  const [ollama, setOllama] = useState<OllamaConfig>({
+    enabled: false,
+    baseUrl: '',
+    model: 'llama3.1',
+    timeoutMs: 4000,
+  });
+  const [ollamaSaved, setOllamaSaved] = useState(false);
+  const [ollamaTest, setOllamaTest] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
 
   useEffect(() => {
     getDailyTargets().then((t) => {
@@ -39,8 +47,28 @@ export default function Settings() {
         fat: { min: String(t.fat.min), max: String(t.fat.max) },
       });
     });
+    getOllamaConfig().then(setOllama);
     setLogs(getDevLogs());
   }, []);
+
+  const handleSaveOllama = async () => {
+    await setOllamaConfig(ollama);
+    setOllamaSaved(true);
+    setTimeout(() => setOllamaSaved(false), 1500);
+  };
+
+  const handleTestOllama = async () => {
+    setOllamaTest('testing');
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ollama.timeoutMs);
+      const res = await fetch(`${ollama.baseUrl.replace(/\/$/, '')}/api/tags`, { signal: controller.signal });
+      clearTimeout(timeout);
+      setOllamaTest(res.ok ? 'ok' : 'fail');
+    } catch {
+      setOllamaTest('fail');
+    }
+  };
 
   const updateField = (key: keyof DailyTargets, side: 'min' | 'max', value: string) => {
     setForm((f) => ({ ...f, [key]: { ...f[key], [side]: value } }));
@@ -96,6 +124,69 @@ export default function Settings() {
       >
         {saved ? 'Saved!' : 'Save'}
       </button>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-semibold text-neutral-900">AI Backend</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          If enabled, meal parsing tries your local Ollama server first (over Tailscale) and falls back to the
+          cloud automatically when it's unreachable.
+        </p>
+
+        <div className="mt-3 space-y-3 rounded-[1.5rem] bg-white p-4 shadow-sm shadow-neutral-200/70">
+          <label className="flex items-center justify-between text-sm font-semibold text-neutral-900">
+            Use local Ollama first
+            <input
+              type="checkbox"
+              className="h-5 w-5"
+              checked={ollama.enabled}
+              onChange={(e) => setOllama((o) => ({ ...o, enabled: e.target.checked }))}
+            />
+          </label>
+
+          <div>
+            <label className="text-xs font-semibold text-neutral-500">Ollama base URL (Tailscale)</label>
+            <input
+              className="mt-1 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              placeholder="https://your-desktop.tailXXXX.ts.net"
+              value={ollama.baseUrl}
+              onChange={(e) => setOllama((o) => ({ ...o, baseUrl: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-neutral-500">Model name</label>
+            <input
+              className="mt-1 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              placeholder="llama3.1"
+              value={ollama.model}
+              onChange={(e) => setOllama((o) => ({ ...o, model: e.target.value }))}
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              className="flex-1 rounded-2xl bg-green-600 py-3 text-sm font-semibold text-white"
+              onClick={handleSaveOllama}
+            >
+              {ollamaSaved ? 'Saved!' : 'Save'}
+            </button>
+            <button
+              className="flex-1 rounded-2xl bg-neutral-900 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={handleTestOllama}
+              disabled={!ollama.baseUrl || ollamaTest === 'testing'}
+            >
+              {ollamaTest === 'testing' ? 'Testing…' : 'Test connection'}
+            </button>
+          </div>
+
+          {ollamaTest === 'ok' && <p className="text-xs font-semibold text-green-600">Reachable ✓</p>}
+          {ollamaTest === 'fail' && (
+            <p className="text-xs font-semibold text-red-600">
+              Couldn't reach it. Check Tailscale is on for both devices and Ollama is running.
+            </p>
+          )}
+        </div>
+      </section>
 
       <section className="mt-8">
         <div className="flex items-center justify-between gap-3">

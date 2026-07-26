@@ -16,16 +16,16 @@ export function MacroSummary({ totals, targets, showingLabel, onClearShowing }: 
   ] as const;
 
   return (
-    <div className="relative pt-5">
+    <div className="relative pt-12">
       {showingLabel && (
-        <div className="absolute left-8 right-8 top-0 animate-[slideChip_420ms_ease-out] rounded-t-2xl bg-white px-4 py-2 shadow-md shadow-neutral-200/80">
+        <div className="absolute left-8 right-8 top-0 z-0 animate-[slideChip_420ms_ease-out] rounded-t-2xl bg-white px-4 pb-5 pt-3 shadow-md shadow-neutral-200/80">
           <button className="flex w-full items-center justify-between gap-3 text-left" onClick={onClearShowing}>
             <span className="truncate text-sm text-neutral-950">Showing {showingLabel}</span>
             <span className="shrink-0 text-sm font-semibold text-red-600">Remove</span>
           </button>
         </div>
       )}
-      <div className="relative space-y-3 rounded-[1.75rem] bg-white p-4 shadow-sm shadow-neutral-200/70">
+      <div className="relative z-10 space-y-3 rounded-[1.75rem] bg-white p-4 shadow-sm shadow-neutral-200/70">
         {items.map((item) => {
           const over = item.value > item.range.max;
           const progress = Math.min(100, Math.round((item.value / Math.max(item.range.max, 1)) * 100));

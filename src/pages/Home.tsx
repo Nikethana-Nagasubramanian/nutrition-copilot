@@ -186,11 +186,11 @@ export default function Home() {
   const handleTouchEnd = (entryId: string, x: number) => {
     if (touchStartX === null) return;
     const delta = x - touchStartX;
-    if (delta > 44) {
+    if (delta < -44) {
       setActionsOpenId((current) => (current === entryId ? null : entryId));
       setSuppressClickId(entryId);
       setTimeout(() => setSuppressClickId(null), 250);
-    } else if (delta < -44 && actionsOpenId === entryId) {
+    } else if (delta > 44 && actionsOpenId === entryId) {
       setActionsOpenId(null);
     }
     setTouchDeltaX(0);
@@ -310,7 +310,7 @@ export default function Home() {
                 onTouchMove={(event) => {
                   if (touchStartX === null) return;
                   const delta = (event.changedTouches[0]?.clientX ?? 0) - touchStartX;
-                  setTouchDeltaX(-Math.max(0, Math.min(delta, 96)));
+                  setTouchDeltaX(Math.min(0, Math.max(delta, -96)));
                 }}
                 onTouchEnd={(event) => handleTouchEnd(e.id, event.changedTouches[0]?.clientX ?? 0)}
               >
@@ -339,7 +339,7 @@ export default function Home() {
                 </div>
                 {actionsOpenId === e.id && (
                   <div className="mt-1 text-right text-[11px] font-medium text-neutral-400">
-                    Swipe left to close
+                    Swipe right to close
                   </div>
                 )}
               </li>
