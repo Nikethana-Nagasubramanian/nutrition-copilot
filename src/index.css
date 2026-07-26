@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+@theme {
+  /* Strong ease-out for UI entrances/exits. Replaces weak built-in ease-out. */
+  --ease-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  /* Strong ease-in-out for elements moving/morphing on screen. */
+  --ease-inout-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  /* iOS-like drawer curve, for the swipe-to-reveal row settle. */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :root {
   color-scheme: light;
 }
@@ -43,5 +52,18 @@ select {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* Keep transitions, but make positional change instant. Opacity and
+       colour transitions are unaffected because they carry meaning. */
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }
