@@ -1,6 +1,6 @@
 # 003 — Fix the swipe-to-reveal row: per-row drag, no transition lag, velocity dismissal
 
-- **Status**: TODO
+- **Status**: DONE (implemented on this branch)
 - **Depends on**: 001 (needs `--ease-drawer`), 002 (adds `data-no-press` to this row)
 - **Commit**: 6d0030f
 - **Severity**: HIGH

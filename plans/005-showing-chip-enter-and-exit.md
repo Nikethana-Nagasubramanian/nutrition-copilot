@@ -1,6 +1,6 @@
 # 005 — Make the "Showing …" chip interruptible and give it an exit
 
-- **Status**: TODO
+- **Status**: DONE (implemented on this branch)
 - **Depends on**: 001 (needs `--ease-strong`)
 - **Commit**: 6d0030f
 - **Severity**: MEDIUM

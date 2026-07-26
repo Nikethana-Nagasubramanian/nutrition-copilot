@@ -1,11 +1,11 @@
 # 002 — Add press feedback to every tap target
 
-- **Status**: TODO
+- **Status**: DONE (implemented on this branch)
 - **Depends on**: 001 (needs `--ease-strong`)
 - **Commit**: 6d0030f
 - **Severity**: MEDIUM
 - **Category**: 3 — Physicality & origin
-- **Estimated scope**: 2 files (`src/index.css`, `src/pages/Home.tsx`), ~15 lines
+- **Estimated scope**: 3 files (`src/index.css`, `src/main.tsx`, `src/pages/Home.tsx`), ~15 lines
 
 ## Problem
 

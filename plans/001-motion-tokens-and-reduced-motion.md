@@ -1,6 +1,6 @@
 # 001 — Add motion tokens and a reduced-motion baseline
 
-- **Status**: TODO
+- **Status**: DONE (implemented on this branch)
 - **Commit**: 6d0030f
 - **Severity**: LOW (but a prerequisite for 002–005)
 - **Category**: 7 — Cohesion & tokens / 6 — Accessibility
@@ -101,8 +101,9 @@ colour feedback** — reduced motion means gentler, not zero:
 
 > Note for the executor: this is a deliberately blunt global baseline so that
 > nothing shipped by plans 002–005 can strand a reduced-motion user mid-slide.
-> Plans 004 and 005 additionally use Tailwind's `motion-reduce:` variant to
-> substitute a *gentler* animation rather than none. Both layers are intended.
+> Every animation in this batch conveys its meaning through its *end state*
+> (a bar's length, a chip's presence, a pressed button's scale), so collapsing
+> the duration loses nothing. No plan needs a `motion-reduce:` override on top.
 
 ## Repo conventions to follow
 

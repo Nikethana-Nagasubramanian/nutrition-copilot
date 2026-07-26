@@ -24,11 +24,11 @@ including a cheaper model, without this audit's context.
 
 | # | Title | Severity | Status |
 | --- | --- | --- | --- |
-| [001](001-motion-tokens-and-reduced-motion.md) | Add motion tokens and a reduced-motion baseline | LOW (prerequisite) | TODO |
-| [002](002-button-press-feedback.md) | Add press feedback to every tap target | MEDIUM | TODO |
-| [003](003-fix-swipe-to-reveal-row.md) | Fix the swipe-to-reveal row | HIGH | TODO |
-| [004](004-animate-macro-progress-bars.md) | Animate the macro bars with transform, not width | MEDIUM | TODO |
-| [005](005-showing-chip-enter-and-exit.md) | Make the "Showing …" chip interruptible, give it an exit | MEDIUM | TODO |
+| [001](001-motion-tokens-and-reduced-motion.md) | Add motion tokens and a reduced-motion baseline | LOW (prerequisite) | DONE |
+| [002](002-button-press-feedback.md) | Add press feedback to every tap target | MEDIUM | DONE |
+| [003](003-fix-swipe-to-reveal-row.md) | Fix the swipe-to-reveal row | HIGH | DONE |
+| [004](004-animate-macro-progress-bars.md) | Animate the macro bars with transform, not width | MEDIUM | DONE |
+| [005](005-showing-chip-enter-and-exit.md) | Make the "Showing …" chip interruptible, give it an exit | MEDIUM | DONE |
 
 ## Execution order and dependencies
 

@@ -1,6 +1,6 @@
 # 004 — Animate the macro progress bars with transform, not width
 
-- **Status**: TODO
+- **Status**: DONE (implemented on this branch)
 - **Depends on**: 001 (needs `--ease-strong`)
 - **Commit**: 6d0030f
 - **Severity**: MEDIUM
