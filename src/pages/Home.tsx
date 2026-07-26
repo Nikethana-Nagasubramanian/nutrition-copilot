@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { MacroSummary } from '../components/MacroSummary';
 import { addLoggedEntry, deleteLoggedEntry, getEntriesForDate, todayKey, updateLoggedEntry } from '../db/logEntries';
 import { createRecurringMeal, findRecurringMealByName } from '../db/recurringMeals';
@@ -14,6 +14,19 @@ const ZERO_TARGETS: DailyTargets = {
   carbs: ZERO_RANGE,
   fat: ZERO_RANGE,
 };
+
+const SWIPE_OPEN_X = -92; // resting offset when actions are revealed
+const SWIPE_MAX_X = -96; // full-reveal boundary
+const SWIPE_TRIGGER_PX = 44; // distance threshold
+const SWIPE_TRIGGER_V = 0.11; // px/ms flick threshold
+const SWIPE_SETTLE = 'transform 250ms var(--ease-drawer)';
+
+// Rising resistance past the boundaries instead of a hard stop.
+function rubberBand(x: number): number {
+  if (x > 0) return x * 0.15;
+  if (x < SWIPE_MAX_X) return SWIPE_MAX_X + (x - SWIPE_MAX_X) * 0.15;
+  return x;
+}
 
 function looksLikeMealName(text: string): boolean {
   const words = text.trim().split(/\s+/);
@@ -44,9 +57,6 @@ export default function Home() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [actionsOpenId, setActionsOpenId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const [touchDeltaX, setTouchDeltaX] = useState(0);
-  const [suppressClickId, setSuppressClickId] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -167,41 +177,31 @@ export default function Home() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     await deleteLoggedEntry(id);
-    if (selectedEntryId === id) setSelectedEntryId(null);
-    if (editingEntryId === id) {
-      setEditingEntryId(null);
-      setInput('');
-    }
+    setSelectedEntryId((current) => (current === id ? null : current));
+    setEditingEntryId((current) => {
+      if (current === id) setInput('');
+      return current === id ? null : current;
+    });
     await refresh();
-  };
+  }, [refresh]);
 
-  const handleEdit = (entry: LoggedEntry) => {
+  const handleEdit = useCallback((entry: LoggedEntry) => {
     setEditingEntryId(entry.id);
     setInput(entry.description);
     setActionsOpenId(null);
-  };
+  }, []);
 
-  const handleTouchEnd = (entryId: string, x: number) => {
-    if (touchStartX === null) return;
-    const delta = x - touchStartX;
-    if (delta < -44) {
-      setActionsOpenId((current) => (current === entryId ? null : entryId));
-      setSuppressClickId(entryId);
-      setTimeout(() => setSuppressClickId(null), 250);
-    } else if (delta > 44 && actionsOpenId === entryId) {
-      setActionsOpenId(null);
-    }
-    setTouchDeltaX(0);
-    setTouchStartX(null);
-  };
+  const handleSetOpen = useCallback((id: string, open: boolean) => {
+    setActionsOpenId(open ? id : null);
+  }, []);
 
-  const selectEntry = (entryId: string) => {
+  const selectEntry = useCallback((entryId: string) => {
     setSelectedEntryId(entryId);
     setActionsOpenId(null);
     chartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  }, []);
 
   return (
     <div className="mx-auto max-w-md px-4 pb-28 pt-5">
@@ -298,51 +298,16 @@ export default function Home() {
         ) : (
           <ul className="mt-2 space-y-2">
             {entries.map((e) => (
-              <li
+              <EntryRow
                 key={e.id}
-                className={`rounded-2xl bg-white p-2 shadow-sm shadow-neutral-200/70 ${
-                  selectedEntryId === e.id ? 'ring-2 ring-green-500' : ''
-                }`}
-                onTouchStart={(event) => {
-                  setTouchStartX(event.changedTouches[0]?.clientX ?? null);
-                  setTouchDeltaX(0);
-                }}
-                onTouchMove={(event) => {
-                  if (touchStartX === null) return;
-                  const delta = (event.changedTouches[0]?.clientX ?? 0) - touchStartX;
-                  setTouchDeltaX(Math.min(0, Math.max(delta, -96)));
-                }}
-                onTouchEnd={(event) => handleTouchEnd(e.id, event.changedTouches[0]?.clientX ?? 0)}
-              >
-                <div className="relative overflow-hidden rounded-xl">
-                  <div className="absolute inset-y-0 right-2 flex items-center gap-3">
-                    <button className="grid h-10 w-10 place-items-center text-blue-600" onClick={() => handleEdit(e)} aria-label="Edit">
-                      <EditIcon />
-                    </button>
-                    <button className="grid h-10 w-10 place-items-center text-red-600" onClick={() => handleDelete(e.id)} aria-label="Delete">
-                      <TrashIcon />
-                    </button>
-                  </div>
-                  <button
-                    className="relative w-full rounded-xl bg-white px-2 py-2 text-left transition-transform duration-300"
-                    style={{ transform: `translateX(${actionsOpenId === e.id ? -92 : touchDeltaX}px)` }}
-                    onClick={() => {
-                      if (suppressClickId === e.id) return;
-                      selectEntry(e.id);
-                    }}
-                  >
-                    <div className="text-sm font-medium text-neutral-900">{e.description}</div>
-                    <div className="text-xs text-neutral-500">
-                      {Math.round(e.calories)} kcal · {Math.round(e.protein)}g protein · {Math.round(e.carbs)}g carbs · {Math.round(e.fat)}g fat
-                    </div>
-                  </button>
-                </div>
-                {actionsOpenId === e.id && (
-                  <div className="mt-1 text-right text-[11px] font-medium text-neutral-400">
-                    Swipe right to close
-                  </div>
-                )}
-              </li>
+                entry={e}
+                isSelected={selectedEntryId === e.id}
+                isOpen={actionsOpenId === e.id}
+                onSetOpen={handleSetOpen}
+                onSelect={selectEntry}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
             ))}
           </ul>
         )}
@@ -411,6 +376,114 @@ function AskResultCard({ result, targets }: { result: AskNutritionResult; target
   );
 }
 
+const EntryRow = memo(function EntryRow({
+  entry,
+  isSelected,
+  isOpen,
+  onSetOpen,
+  onSelect,
+  onEdit,
+  onDelete,
+}: {
+  entry: LoggedEntry;
+  isSelected: boolean;
+  isOpen: boolean;
+  onSetOpen: (id: string, open: boolean) => void;
+  onSelect: (id: string) => void;
+  onEdit: (entry: LoggedEntry) => void;
+  onDelete: (id: string) => void;
+}) {
+  const rowRef = useRef<HTMLButtonElement | null>(null);
+  const drag = useRef<{ startX: number; startT: number; delta: number } | null>(null);
+  const movedRef = useRef(false);
+
+  const restingX = isOpen ? SWIPE_OPEN_X : 0;
+
+  // Settle to the resting offset whenever open state changes (including the
+  // initial mount, where transform is already 0 so nothing visibly animates).
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    el.style.transition = SWIPE_SETTLE;
+    el.style.transform = `translateX(${restingX}px)`;
+  }, [restingX]);
+
+  return (
+    <li
+      className={`rounded-2xl bg-white p-2 shadow-sm shadow-neutral-200/70 ${
+        isSelected ? 'ring-2 ring-green-500' : ''
+      }`}
+      style={{ touchAction: 'pan-y' }}
+      onTouchStart={(event) => {
+        const x = event.touches[0]?.clientX;
+        if (x === undefined) return;
+        drag.current = { startX: x, startT: performance.now(), delta: 0 };
+        movedRef.current = false;
+        // Direct manipulation must track the finger 1:1 — no transition.
+        if (rowRef.current) rowRef.current.style.transition = 'none';
+      }}
+      onTouchMove={(event) => {
+        const d = drag.current;
+        const x = event.touches[0]?.clientX;
+        if (!d || x === undefined || !rowRef.current) return;
+        d.delta = x - d.startX;
+        if (Math.abs(d.delta) > 6) movedRef.current = true;
+        rowRef.current.style.transform = `translateX(${rubberBand(restingX + d.delta)}px)`;
+      }}
+      onTouchEnd={() => {
+        const d = drag.current;
+        drag.current = null;
+        const el = rowRef.current;
+        if (!d || !el) return;
+
+        const velocity = Math.abs(d.delta) / Math.max(performance.now() - d.startT, 1);
+        const flicked = velocity > SWIPE_TRIGGER_V;
+
+        let next = isOpen;
+        if (d.delta < 0 && (flicked || d.delta <= -SWIPE_TRIGGER_PX)) next = true;
+        else if (d.delta > 0 && (flicked || d.delta >= SWIPE_TRIGGER_PX)) next = false;
+
+        // Always settle, even when the open state is unchanged — the effect
+        // above only fires when `restingX` actually changes.
+        el.style.transition = SWIPE_SETTLE;
+        el.style.transform = `translateX(${next ? SWIPE_OPEN_X : 0}px)`;
+        if (next !== isOpen) onSetOpen(entry.id, next);
+      }}
+    >
+      <div className="relative overflow-hidden rounded-xl">
+        <div className="absolute inset-y-0 right-2 flex items-center gap-3">
+          <button className="grid h-10 w-10 place-items-center text-blue-600" onClick={() => onEdit(entry)} aria-label="Edit">
+            <EditIcon />
+          </button>
+          <button className="grid h-10 w-10 place-items-center text-red-600" onClick={() => onDelete(entry.id)} aria-label="Delete">
+            <TrashIcon />
+          </button>
+        </div>
+        <button
+          ref={rowRef}
+          data-no-press
+          className="relative w-full rounded-xl bg-white px-2 py-2 text-left"
+          onClick={() => {
+            // A drag is not a tap.
+            if (movedRef.current) return;
+            onSelect(entry.id);
+          }}
+        >
+          <div className="text-sm font-medium text-neutral-900">{entry.description}</div>
+          <div className="text-xs text-neutral-500">
+            {Math.round(entry.calories)} kcal · {Math.round(entry.protein)}g protein · {Math.round(entry.carbs)}g carbs · {Math.round(entry.fat)}g fat
+          </div>
+        </button>
+      </div>
+      {isOpen && (
+        <div className="mt-1 text-right text-[11px] font-medium text-neutral-400">
+          Swipe right to close
+        </div>
+      )}
+    </li>
+  );
+});
+
 function EditIcon() {
   return (
     <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -456,7 +529,10 @@ function AskBar({ label, value, target, unit, color }: { label: string; value: n
         </span>
       </div>
       <div className="mt-1 h-2 overflow-hidden rounded-full bg-neutral-100">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${progress}%` }} />
+        <div
+          className={`h-full w-full origin-left rounded-full ${color} transition-transform duration-300 ease-strong`}
+          style={{ transform: `scaleX(${progress / 100})` }}
+        />
       </div>
     </div>
   );

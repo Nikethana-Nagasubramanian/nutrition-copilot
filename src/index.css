@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+@theme {
+  /* Strong ease-out for UI entrances/exits. Replaces weak built-in ease-out. */
+  --ease-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  /* Strong ease-in-out for elements moving/morphing on screen. */
+  --ease-inout-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  /* iOS-like drawer curve, for the swipe-to-reveal row settle. */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :root {
   color-scheme: light;
 }
@@ -29,19 +38,49 @@ select {
   font: inherit;
 }
 
+button {
+  transition: transform 160ms var(--ease-strong);
+}
+
+button:not(:disabled):not([data-no-press]):active {
+  transform: scale(0.97);
+}
+
 input,
 textarea,
 select {
   font-size: 16px;
 }
 
-@keyframes slideChip {
-  from {
+/* The "Showing …" chip slides up from behind the macro card. It emerges from
+   behind a solid object, so it translates only — it does not scale. */
+.macro-chip {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms var(--ease-strong), transform 200ms var(--ease-strong);
+}
+
+@starting-style {
+  .macro-chip {
     opacity: 0;
-    transform: translateY(18px) scale(0.98);
+    transform: translateY(12px);
   }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+}
+
+.macro-chip[data-closing] {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* Keep transitions, but make positional change instant. Opacity and
+       colour transitions are unaffected because they carry meaning. */
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -22,6 +22,9 @@ window.addEventListener('unhandledrejection', (event) => {
   });
 });
 
+// iOS Safari only applies :active styles when a touchstart listener exists.
+document.addEventListener('touchstart', () => {}, { passive: true });
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
