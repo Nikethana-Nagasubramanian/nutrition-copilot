@@ -42,3 +42,14 @@ export interface DailyTargets {
   carbs: MacroRange;
   fat: MacroRange;
 }
+
+export interface AskNutritionResult {
+  verdict: 'yes' | 'caution' | 'no';
+  assumption: string;
+  foodName: string;
+  adds: Macros;
+  newTotals: Macros;
+  remaining: Macros;
+  summary: string;
+  suggestion?: string | null;
+}

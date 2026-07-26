@@ -51,3 +51,14 @@ export async function deleteLoggedEntry(id: string): Promise<void> {
   const db = await getDb();
   await db.delete('entries', id);
 }
+
+export async function updateLoggedEntry(
+  id: string,
+  description: string,
+  macros: Macros
+): Promise<void> {
+  const db = await getDb();
+  const existing = await db.get('entries', id);
+  if (!existing) return;
+  await db.put('entries', { ...existing, description, ...macros });
+}

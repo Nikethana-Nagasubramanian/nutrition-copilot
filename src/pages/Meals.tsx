@@ -33,6 +33,7 @@ export default function Meals() {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [toast, setToast] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const refresh = async () => setMeals(await getAllRecurringMeals());
 
@@ -65,20 +66,26 @@ export default function Meals() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || isSaving) return;
+    setIsSaving(true);
     const macros = {
       calories: Number(form.calories) || 0,
       protein: Number(form.protein) || 0,
       carbs: Number(form.carbs) || 0,
       fat: Number(form.fat) || 0,
     };
-    if (form.id) {
-      await updateRecurringMeal(form.id, form.name.trim(), form.description.trim(), macros);
-    } else {
-      await createRecurringMeal(form.name.trim(), form.description.trim(), macros);
+    try {
+      if (form.id) {
+        await updateRecurringMeal(form.id, form.name.trim(), form.description.trim(), macros);
+      } else {
+        await createRecurringMeal(form.name.trim(), form.description.trim(), macros);
+      }
+      setFormOpen(false);
+      setForm(emptyForm);
+      await refresh();
+    } finally {
+      setIsSaving(false);
     }
-    setFormOpen(false);
-    await refresh();
   };
 
   const handleDelete = async (id: string) => {
@@ -92,16 +99,89 @@ export default function Meals() {
   };
 
   return (
-    <div className="mx-auto max-w-md px-5 pb-28 pt-6">
+    <div className="mx-auto max-w-md px-4 pb-28 pt-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-neutral-900">Recurring Meals</h1>
+        <div>
+          <h1 className="text-[2rem] font-bold leading-tight tracking-normal text-neutral-950">Meals</h1>
+          <p className="mt-1 text-sm text-neutral-500">Save repeat meals and log them without AI.</p>
+        </div>
         <button
-          className="rounded-xl bg-green-600 px-3 py-1.5 text-sm font-semibold text-white"
+          className="rounded-2xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white"
           onClick={openCreate}
         >
-          + Add
+          Add
         </button>
       </div>
+
+      {formOpen && (
+        <div className="mt-5 rounded-[1.5rem] bg-white p-4 shadow-sm shadow-neutral-200/70">
+          <h2 className="text-lg font-bold text-neutral-900">{form.id ? 'Edit Meal' : 'New Meal'}</h2>
+
+          <input
+            className="mt-4 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+            placeholder="Name (e.g. Protein Shake)"
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          />
+          <textarea
+            className="mt-3 w-full resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+            rows={3}
+            placeholder="Description (e.g. 1.5 scoop whey, 2 tbsp yogurt...)"
+            value={form.description}
+            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          />
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <input
+              className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              placeholder="Calories"
+              inputMode="numeric"
+              value={form.calories}
+              onChange={(e) => setForm((f) => ({ ...f, calories: e.target.value }))}
+            />
+            <input
+              className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              placeholder="Protein (g)"
+              inputMode="numeric"
+              value={form.protein}
+              onChange={(e) => setForm((f) => ({ ...f, protein: e.target.value }))}
+            />
+            <input
+              className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              placeholder="Carbs (g)"
+              inputMode="numeric"
+              value={form.carbs}
+              onChange={(e) => setForm((f) => ({ ...f, carbs: e.target.value }))}
+            />
+            <input
+              className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              placeholder="Fat (g)"
+              inputMode="numeric"
+              value={form.fat}
+              onChange={(e) => setForm((f) => ({ ...f, fat: e.target.value }))}
+            />
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button
+              className="flex-1 rounded-2xl bg-neutral-100 py-3 text-sm font-semibold text-neutral-700"
+              onClick={() => {
+                setFormOpen(false);
+                setForm(emptyForm);
+              }}
+              disabled={isSaving}
+            >
+              Cancel
+            </button>
+            <button
+              className="flex-1 rounded-2xl bg-green-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={handleSave}
+              disabled={!form.name.trim() || isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {meals.length === 0 ? (
         <p className="mt-8 text-center text-sm text-neutral-400">
@@ -110,7 +190,7 @@ export default function Meals() {
       ) : (
         <ul className="mt-4 space-y-3">
           {meals.map((meal) => (
-            <li key={meal.id} className="flex items-center gap-3 rounded-2xl bg-neutral-100 p-4">
+            <li key={meal.id} className="flex items-center gap-3 rounded-[1.25rem] bg-white p-4 shadow-sm shadow-neutral-200/70">
               <button className="min-w-0 flex-1 text-left" onClick={() => openEdit(meal)}>
                 <div className="truncate text-sm font-semibold text-neutral-900">{meal.name}</div>
                 {meal.description && (
@@ -122,7 +202,7 @@ export default function Meals() {
               </button>
               <div className="flex flex-col items-end gap-2">
                 <button
-                  className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
+                  className="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
                   onClick={() => handleLogNow(meal)}
                 >
                   Log
@@ -137,78 +217,8 @@ export default function Meals() {
       )}
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-neutral-900 px-4 py-2 text-xs font-medium text-white">
+        <div className="fixed bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-full bg-neutral-900 px-4 py-2 text-xs font-medium text-white">
           {toast}
-        </div>
-      )}
-
-      {formOpen && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setFormOpen(false)}>
-          <div
-            className="max-h-[85vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-bold text-neutral-900">{form.id ? 'Edit Meal' : 'New Meal'}</h2>
-
-            <input
-              className="mt-4 w-full rounded-xl border border-neutral-300 px-3 py-2 text-sm"
-              placeholder="Name (e.g. Protein Shake)"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-            <textarea
-              className="mt-3 w-full resize-none rounded-xl border border-neutral-300 px-3 py-2 text-sm"
-              rows={3}
-              placeholder="Description (e.g. 1.5 scoop whey, 2 tbsp yogurt...)"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            />
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <input
-                className="rounded-xl border border-neutral-300 px-3 py-2 text-sm"
-                placeholder="Calories"
-                inputMode="numeric"
-                value={form.calories}
-                onChange={(e) => setForm((f) => ({ ...f, calories: e.target.value }))}
-              />
-              <input
-                className="rounded-xl border border-neutral-300 px-3 py-2 text-sm"
-                placeholder="Protein (g)"
-                inputMode="numeric"
-                value={form.protein}
-                onChange={(e) => setForm((f) => ({ ...f, protein: e.target.value }))}
-              />
-              <input
-                className="rounded-xl border border-neutral-300 px-3 py-2 text-sm"
-                placeholder="Carbs (g)"
-                inputMode="numeric"
-                value={form.carbs}
-                onChange={(e) => setForm((f) => ({ ...f, carbs: e.target.value }))}
-              />
-              <input
-                className="rounded-xl border border-neutral-300 px-3 py-2 text-sm"
-                placeholder="Fat (g)"
-                inputMode="numeric"
-                value={form.fat}
-                onChange={(e) => setForm((f) => ({ ...f, fat: e.target.value }))}
-              />
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button
-                className="flex-1 rounded-xl bg-neutral-200 py-2.5 text-sm font-semibold text-neutral-700"
-                onClick={() => setFormOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="flex-1 rounded-xl bg-green-600 py-2.5 text-sm font-semibold text-white"
-                onClick={handleSave}
-              >
-                Save
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

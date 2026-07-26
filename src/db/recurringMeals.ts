@@ -13,6 +13,14 @@ export async function createRecurringMeal(
   macros: Macros
 ): Promise<RecurringMeal> {
   const db = await getDb();
+  const existingMeals = await db.getAllFromIndex('recurringMeals', 'name');
+  const existing = existingMeals.find((m) => m.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    const updated = { ...existing, name, description, ...macros };
+    await db.put('recurringMeals', updated);
+    return updated;
+  }
+
   const meal: RecurringMeal = {
     id: newId(),
     name,
