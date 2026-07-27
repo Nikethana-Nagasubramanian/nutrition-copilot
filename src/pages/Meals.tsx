@@ -6,6 +6,7 @@ import {
   updateRecurringMeal,
 } from '../db/recurringMeals';
 import { addLoggedEntry } from '../db/logEntries';
+import { parseMealDescription } from '../services/openai';
 import type { RecurringMeal } from '../types/nutrition';
 
 interface FormState {
@@ -34,6 +35,8 @@ export default function Meals() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [toast, setToast] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isEstimating, setIsEstimating] = useState(false);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
 
   const refresh = async () => setMeals(await getAllRecurringMeals());
 
@@ -93,6 +96,26 @@ export default function Meals() {
     await refresh();
   };
 
+  const handleEstimate = async () => {
+    if (!form.description.trim() || isEstimating) return;
+    setIsEstimating(true);
+    setEstimateError(null);
+    try {
+      const parsed = await parseMealDescription(form.description.trim());
+      setForm((f) => ({
+        ...f,
+        calories: String(Math.round(parsed.totals.calories)),
+        protein: String(Math.round(parsed.totals.protein)),
+        carbs: String(Math.round(parsed.totals.carbs)),
+        fat: String(Math.round(parsed.totals.fat)),
+      }));
+    } catch (err: any) {
+      setEstimateError(err?.message ?? 'Could not estimate macros.');
+    } finally {
+      setIsEstimating(false);
+    }
+  };
+
   const handleLogNow = async (meal: RecurringMeal) => {
     await addLoggedEntry(meal.name, meal, meal.id);
     setToast(`${meal.name} logged`);
@@ -130,6 +153,16 @@ export default function Meals() {
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           />
+
+          <button
+            className="mt-3 w-full rounded-2xl bg-neutral-900 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            onClick={handleEstimate}
+            disabled={!form.description.trim() || isEstimating}
+          >
+            {isEstimating ? 'Estimating…' : 'Estimate with AI'}
+          </button>
+          {estimateError && <p className="mt-2 text-xs font-semibold text-red-600">{estimateError}</p>}
+
           <div className="mt-3 grid grid-cols-2 gap-2">
             <input
               className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"

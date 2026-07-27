@@ -6,24 +6,30 @@ const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined;
 const MODEL = 'claude-haiku-4-5-20251001';
 const USE_DIRECT_BROWSER_API = Boolean(import.meta.env.DEV && API_KEY);
 
-const MEAL_SYSTEM_PROMPT = `You are a nutrition estimation assistant for a personal calorie-tracking app.
-The user will describe what they ate in casual, imprecise language.
+const MEAL_SYSTEM_PROMPT = `You are a nutrition estimation assistant. Estimate calories and macros from natural language descriptions of food.
 
 Rules:
-- Always estimate conservatively.
-- Never overestimate protein. If uncertain, use the lower bound of a reasonable protein range.
-- Never underestimate calories. If uncertain, use the upper-reasonable bound of a reasonable calorie range.
-- Break the meal into individual food items.
-- Mark each item's confidence as "low" if the description was vague or "high" if it was specific.
-- Respond ONLY with valid JSON matching this exact shape, no prose, no markdown fences:
+1. Use conservative estimates.
+   - Never overestimate protein. If uncertain, use the lower bound of a reasonable protein range.
+   - Never underestimate calories. If uncertain, use the upper-reasonable bound of a reasonable calorie range.
+2. Scale quantities linearly with portion size (e.g. if 3/4 cup is 80 kcal / 8g protein, 1/2 cup is 53 kcal / 5.3g protein).
+3. If the user provides specific nutrition-label or manufacturer numbers, those override your generic estimate entirely.
+4. Never invent ingredients. If the user doesn't mention cheese, oil, butter, dressing, etc., do not add it or its calories.
+   If a common version of this dish usually includes such an ingredient, say so in a note instead of assuming it's present.
+5. If a portion is vague ("a handful", "a bowl", "a spoon"), use a common serving size and reflect that with lower confidence.
+6. Do not lecture about healthy eating. Return estimates only.
+7. Do not double count ingredients that appear in multiple foods.
+8. Confidence per item: "high" (exact label/brand given), "medium" (common, well-defined serving), "low" (multiple assumptions required).
+9. Prioritize consistency: the same meal description should produce nearly identical numbers every time. Do not vary your estimate for its own sake.
+10. Respond ONLY with valid JSON matching this exact shape, no prose, no markdown fences:
 {
   "foods": [
-    { "name": string, "calories": number, "protein": number, "carbs": number, "fat": number, "confidence": "high" | "low" }
+    { "name": string, "quantity": string, "calories": number, "protein": number, "carbs": number, "fat": number, "confidence": "high" | "medium" | "low" }
   ],
   "totals": { "calories": number, "protein": number, "carbs": number, "fat": number },
   "lowConfidenceNote": string | null
 }
-Set lowConfidenceNote to a short (<20 words) note if any item has low confidence, explaining what's uncertain. Otherwise null.`;
+Set lowConfidenceNote to a short (<20 words) note if any item is medium/low confidence or an ingredient was assumed absent, explaining what's uncertain. Otherwise null.`;
 
 function requireApiKey() {
   if (!USE_DIRECT_BROWSER_API && import.meta.env.DEV) {
@@ -162,6 +168,7 @@ async function callOllama({
         model: config.model,
         stream: false,
         format: 'json',
+        options: { temperature: 0 },
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },
@@ -200,6 +207,7 @@ async function callAnthropic({
   const payload = {
     model: MODEL,
     max_tokens: maxTokens,
+    temperature: 0,
     system,
     messages: [{ role: 'user', content: user }],
   };
