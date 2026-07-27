@@ -29,7 +29,7 @@ function App() {
           </Routes>
         </main>
 
-        <nav className="fixed inset-x-0 bottom-0 border-t border-neutral-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:absolute">
+        <nav className="absolute inset-x-0 bottom-0 border-t border-neutral-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
           <div className="mx-auto flex max-w-md">
             {tabs.map((tab) => (
               <NavLink
