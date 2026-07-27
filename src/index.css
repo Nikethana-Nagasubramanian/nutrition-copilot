@@ -16,6 +16,7 @@ html {
 
 body {
   margin: 0;
+  background: #f6f4ef;
   overscroll-behavior: none;
   touch-action: manipulation;
   -webkit-font-smoothing: antialiased;
@@ -33,6 +34,158 @@ input,
 textarea,
 select {
   font-size: 16px;
+}
+
+.app-stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #f6f4ef;
+  color: #0a0a0a;
+}
+
+.phone-shell {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #f6f4ef;
+}
+
+.app-screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #f6f4ef;
+}
+
+.app-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding-top: env(safe-area-inset-top);
+}
+
+.dynamic-island,
+.phone-button {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  body {
+    background:
+      radial-gradient(circle at 48% 52%, rgba(255, 255, 255, 0.32), transparent 22rem),
+      linear-gradient(90deg, #d9d1c2, #d4ccbd);
+  }
+
+  .app-stage {
+    --phone-scale: min(calc((100vw - 96px) / 393), calc((100vh - 80px) / 852), 1);
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(circle at 50% 52%, rgba(255, 255, 255, 0.35), transparent 24rem),
+      linear-gradient(90deg, #d9d1c2, #d4ccbd);
+    padding: 40px;
+  }
+
+  .phone-shell {
+    position: relative;
+    inset: auto;
+    width: 393px;
+    height: 852px;
+    overflow: visible;
+    border-radius: 58px;
+    background:
+      linear-gradient(135deg, #6a6a66 0%, #151515 17%, #050505 48%, #3d3d39 83%, #77766f 100%);
+    box-shadow:
+      0 34px 90px rgba(0, 0, 0, 0.28),
+      0 8px 24px rgba(0, 0, 0, 0.24),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+      inset 0 0 0 4px rgba(0, 0, 0, 0.9);
+    padding: 13px;
+    transform: scale(var(--phone-scale));
+  }
+
+  .phone-shell::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border-radius: 54px;
+    border: 2px solid rgba(255, 255, 255, 0.16);
+    pointer-events: none;
+  }
+
+  .phone-shell::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -15px;
+    width: 42px;
+    height: 5px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: rgba(35, 35, 32, 0.55);
+    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.22);
+  }
+
+  .app-screen {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: 100%;
+    border-radius: 46px;
+    overflow: hidden;
+    background: #f6f4ef;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+      inset 0 0 0 2px rgba(0, 0, 0, 0.08);
+  }
+
+  .app-scroll {
+    padding-top: 42px;
+  }
+
+  .dynamic-island {
+    display: block;
+    position: absolute;
+    z-index: 60;
+    left: 50%;
+    top: 12px;
+    width: 108px;
+    height: 34px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: #050505;
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.08),
+      0 1px 2px rgba(255, 255, 255, 0.12);
+    pointer-events: none;
+  }
+
+  .phone-button {
+    display: block;
+    position: absolute;
+    width: 4px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #6f6e68, #242421);
+    box-shadow: inset 1px 0 rgba(255, 255, 255, 0.24);
+  }
+
+  .phone-button-left-top {
+    left: -3px;
+    top: 116px;
+    height: 54px;
+  }
+
+  .phone-button-left-mid {
+    left: -3px;
+    top: 188px;
+    height: 82px;
+  }
+
+  .phone-button-right {
+    right: -3px;
+    top: 174px;
+    height: 90px;
+  }
 }
 
 @keyframes slideChip {
