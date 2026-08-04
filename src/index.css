@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -16,7 +17,9 @@ html {
 
 body {
   margin: 0;
-  background: #f6f4ef;
+  background: #fff;
+  font-family: "Inter Tight", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0.015em;
   overscroll-behavior: none;
   touch-action: manipulation;
   -webkit-font-smoothing: antialiased;
@@ -40,7 +43,7 @@ select {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #f6f4ef;
+  background: #fff;
   color: #0a0a0a;
 }
 
@@ -48,14 +51,14 @@ select {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #f6f4ef;
+  background: #f4f5f6;
 }
 
 .app-screen {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #f6f4ef;
+  background: #fff;
 }
 
 .app-scroll {
@@ -69,20 +72,422 @@ select {
   display: none;
 }
 
+.nav-tab {
+  transition:
+    color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.nav-tab:active {
+  transform: scale(0.96);
+}
+
+.attached-banner {
+  animation: attachedBannerIn 360ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.meal-flip-slot {
+  position: relative;
+  height: 126px;
+  perspective: 900px;
+}
+
+.meal-flip-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+  transition:
+    opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 420ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.meal-flip-front {
+  transform: rotateX(0deg);
+  transform-origin: center top;
+}
+
+.meal-flip-back {
+  opacity: 0;
+  transform: rotateX(88deg);
+  transform-origin: center bottom;
+}
+
+.meal-flip-mic {
+  position: absolute;
+  left: 20px;
+  bottom: 18px;
+  z-index: 3;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: #0a0a0a;
+  border: 0;
+  border-radius: 999px;
+  background: #f2f2f2;
+  cursor: pointer;
+  transition:
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.meal-flip-mic:hover {
+  background: #e8e8e8;
+}
+
+.meal-flip-mic:active {
+  transform: scale(0.92);
+}
+
+.meal-flip-mic:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.meal-flip-slot.is-logged .meal-flip-mic {
+  opacity: 1;
+  transform: none;
+}
+
+.meal-flip-slot.is-logged .meal-flip-front {
+  opacity: 0;
+  transform: rotateX(-88deg);
+}
+
+.meal-flip-slot.is-logged .meal-flip-back {
+  opacity: 1;
+  transform: rotateX(0deg);
+}
+
+.voice-recorder {
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  animation: voiceRecorderIn 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.meal-flip-action,
+.ask-composer-action {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 4;
+  display: inline-flex;
+  min-width: 128px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #161515;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: inset 2px 2px 6px 2px rgba(255, 255, 255, 0.14);
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.meal-flip-action:active,
+.ask-composer-action:active {
+  transform: scale(0.97);
+}
+
+.meal-flip-action:disabled,
+.ask-composer-action:disabled {
+  cursor: default;
+  background: #f2f2f2;
+  color: #a1a1aa;
+  box-shadow: none;
+}
+
+.meal-flip-slot.is-logged .meal-flip-action {
+  background: #161515;
+  color: #fff;
+}
+
+.ask-composer {
+  position: relative;
+  height: 150px;
+  border: 1px solid #e5e5ea;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.02),
+    0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.ask-composer-mic {
+  position: absolute;
+  left: 20px;
+  bottom: 18px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #f2f2f2;
+  color: #0a0a0a;
+  cursor: pointer;
+  transition:
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.ask-composer-mic:hover {
+  background: #e8e8e8;
+}
+
+.ask-composer-mic:active {
+  transform: scale(0.92);
+}
+
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.voice-waveform {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #18181b;
+}
+
+.voice-waveform::before,
+.voice-waveform::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  border-top: 1px dashed #d4d4d8;
+}
+
+.voice-waveform span {
+  width: 2px;
+  min-height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: scaleY(0.72);
+  opacity: 0.9;
+}
+
+.voice-waveform.is-recording span {
+  animation: voiceBar 780ms cubic-bezier(0.32, 0.72, 0, 1) infinite alternate;
+}
+
+.voice-timer {
+  width: 32px;
+  color: #52525b;
+  font-size: 14px;
+  line-height: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-stop-button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  transition:
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.voice-stop-button {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.voice-stop-button span {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.voice-stop-button:active {
+  transform: scale(0.92);
+}
+
+.voice-stop-button:disabled {
+  opacity: 0.5;
+  transform: none;
+}
+
+.paper-cta {
+  box-shadow: inset 2px 2px 6px 2px rgba(255, 255, 255, 0.2);
+  transition:
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.paper-cta:active {
+  transform: scale(0.985);
+}
+
+.range-slider-thumb {
+  pointer-events: none;
+  outline: none;
+}
+
+.range-slider-thumb:focus,
+.range-slider-thumb:focus-visible {
+  outline: none;
+}
+
+.range-slider-thumb::-webkit-slider-runnable-track {
+  height: 32px;
+  background: transparent;
+}
+
+.range-slider-thumb::-webkit-slider-thumb {
+  pointer-events: auto;
+  width: 24px;
+  height: 32px;
+  margin-top: 0;
+  appearance: none;
+  border: 0;
+  background: transparent;
+}
+
+.range-slider-thumb::-moz-range-track {
+  height: 32px;
+  background: transparent;
+}
+
+.range-slider-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 24px;
+  height: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 0;
+  background: transparent;
+}
+
+.notebook-pen-icon path,
+.audio-lines-icon path,
+.audio-lines-icon rect,
+.utensils-crossed path,
+.settings-icon path,
+.settings-icon circle {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.nav-icon-fill {
+  fill: currentColor;
+  opacity: 0;
+  stroke: none;
+  transform: scale(0.92);
+  transition:
+    opacity 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.nav-tab[aria-current="page"] .nav-icon-fill {
+  opacity: 0.13;
+  transform: scale(1);
+}
+
+.nav-tab-log[aria-current="page"] .notebook-ring,
+.nav-tab-log:active .notebook-ring {
+  stroke-dasharray: 4;
+  animation: writeNotebookRing 480ms cubic-bezier(0.23, 1, 0.32, 1);
+  animation-fill-mode: backwards;
+}
+
+.nav-tab-log[aria-current="page"] .notebook-ring-2,
+.nav-tab-log:active .notebook-ring-2 {
+  animation-delay: 45ms;
+}
+
+.nav-tab-log[aria-current="page"] .notebook-ring-3,
+.nav-tab-log:active .notebook-ring-3 {
+  animation-delay: 90ms;
+}
+
+.nav-tab-log[aria-current="page"] .notebook-ring-4,
+.nav-tab-log:active .notebook-ring-4 {
+  animation-delay: 135ms;
+}
+
+.nav-tab-log[aria-current="page"] .notebook-pen,
+.nav-tab-log:active .notebook-pen {
+  animation: notebookPenWrite 560ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.nav-tab-ask[aria-current="page"] .audio-line,
+.nav-tab-ask:active .audio-line {
+  animation: audioLinePulse 560ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.nav-tab-ask[aria-current="page"] .audio-line-2,
+.nav-tab-ask:active .audio-line-2,
+.nav-tab-ask[aria-current="page"] .audio-line-5,
+.nav-tab-ask:active .audio-line-5 {
+  animation-delay: 45ms;
+}
+
+.nav-tab-ask[aria-current="page"] .audio-line-3,
+.nav-tab-ask:active .audio-line-3,
+.nav-tab-ask[aria-current="page"] .audio-line-4,
+.nav-tab-ask:active .audio-line-4 {
+  animation-delay: 90ms;
+}
+
+.nav-tab-meals[aria-current="page"] .utensil-fork,
+.nav-tab-meals:active .utensil-fork {
+  animation: utensilForkCross 520ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.nav-tab-meals[aria-current="page"] .utensil-main,
+.nav-tab-meals:active .utensil-main {
+  animation: utensilMainCross 520ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.nav-tab-meals[aria-current="page"] .utensil-knife,
+.nav-tab-meals:active .utensil-knife {
+  animation: utensilKnifeCross 520ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.nav-tab-meals[aria-current="page"] .utensil-handle,
+.nav-tab-meals:active .utensil-handle {
+  animation: utensilHandleCross 520ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 @media (min-width: 768px) {
   body {
-    background:
-      radial-gradient(circle at 48% 52%, rgba(255, 255, 255, 0.32), transparent 22rem),
-      linear-gradient(90deg, #d9d1c2, #d4ccbd);
+    background: #fff;
   }
 
   .app-stage {
     --phone-scale: min(calc((100vw - 96px) / 393), calc((100vh - 80px) / 852), 1);
     display: grid;
     place-items: center;
-    background:
-      radial-gradient(circle at 50% 52%, rgba(255, 255, 255, 0.35), transparent 24rem),
-      linear-gradient(90deg, #d9d1c2, #d4ccbd);
+    background: #fff;
     padding: 40px;
   }
 
@@ -113,19 +518,6 @@ select {
     pointer-events: none;
   }
 
-  .phone-shell::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: -15px;
-    width: 42px;
-    height: 5px;
-    transform: translateX(-50%);
-    border-radius: 999px;
-    background: rgba(35, 35, 32, 0.55);
-    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.22);
-  }
-
   .app-screen {
     position: relative;
     inset: auto;
@@ -133,7 +525,7 @@ select {
     height: 100%;
     border-radius: 46px;
     overflow: hidden;
-    background: #f6f4ef;
+    background: #fff;
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.72),
       inset 0 0 0 2px rgba(0, 0, 0, 0.08);
@@ -196,5 +588,145 @@ select {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes attachedBannerIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes voiceRecorderIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes voiceBar {
+  0% {
+    transform: scaleY(0.58);
+  }
+  100% {
+    transform: scaleY(1.18);
+  }
+}
+
+@keyframes writeNotebookRing {
+  0% {
+    stroke-dashoffset: 4;
+    opacity: 0.3;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes notebookPenWrite {
+  0% {
+    transform: translate3d(2px, -2px, 0) rotate(8deg);
+    opacity: 0.72;
+  }
+  54% {
+    transform: translate3d(-1px, 1px, 0) rotate(-4deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0);
+    opacity: 1;
+  }
+}
+
+@keyframes audioLinePulse {
+  0% {
+    transform: scaleY(0.62);
+    opacity: 0.55;
+  }
+  55% {
+    transform: scaleY(1.12);
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes utensilForkCross {
+  0% {
+    transform: translate3d(3px, -3px, 0) rotate(12deg);
+    opacity: 0.72;
+  }
+  58% {
+    transform: translate3d(-1px, 1px, 0) rotate(-5deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0);
+    opacity: 1;
+  }
+}
+
+@keyframes utensilMainCross {
+  0% {
+    transform: translate3d(-3px, 3px, 0) rotate(-10deg);
+    opacity: 0.72;
+  }
+  58% {
+    transform: translate3d(1px, -1px, 0) rotate(4deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0);
+    opacity: 1;
+  }
+}
+
+@keyframes utensilKnifeCross {
+  0% {
+    transform: translate3d(2px, -2px, 0) rotate(14deg);
+  }
+  62% {
+    transform: translate3d(-1px, 1px, 0) rotate(-6deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0);
+  }
+}
+
+@keyframes utensilHandleCross {
+  0% {
+    transform: translate3d(-2px, 2px, 0) rotate(-12deg);
+  }
+  62% {
+    transform: translate3d(1px, -1px, 0) rotate(5deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-tab,
+  .attached-banner,
+  .meal-flip-face,
+  .voice-recorder,
+  .voice-waveform span,
+  .notebook-pen-icon path,
+  .audio-lines-icon path,
+  .audio-lines-icon rect,
+  .utensils-crossed path,
+  .settings-icon path,
+  .settings-icon circle,
+  .nav-icon-fill {
+    animation: none !important;
+    transition: none !important;
   }
 }

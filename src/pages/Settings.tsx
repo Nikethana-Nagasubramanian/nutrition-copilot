@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { getDailyTargets, setDailyTargets, getOllamaConfig, setOllamaConfig } from '../db/settings';
+import { getDailyTargets, getOllamaConfig, getWhoopConfig, setDailyTargets, setOllamaConfig, setWhoopConfig } from '../db/settings';
 import { clearDevLogs, getDevLogs, type DevLogEntry } from '../services/devLogs';
-import type { DailyTargets, OllamaConfig } from '../types/nutrition';
+import { buildWhoopAuthUrl, defaultWhoopRedirectUri, makeWhoopState, WHOOP_SCOPES } from '../services/whoop';
+import type { DailyTargets, OllamaConfig, WhoopConfig } from '../types/nutrition';
 
 interface RangeFields {
   min: string;
@@ -18,11 +19,11 @@ const emptyForm: FormState = {
   fat: emptyRange,
 };
 
-const FIELDS: { key: keyof DailyTargets; label: string }[] = [
-  { key: 'calories', label: 'Calories' },
-  { key: 'protein', label: 'Protein (g)' },
-  { key: 'carbs', label: 'Carbs (g)' },
-  { key: 'fat', label: 'Fat (g)' },
+const FIELDS: { key: keyof DailyTargets; label: string; railLabel: string; unit: string; maxLimit: number; color: string }[] = [
+  { key: 'calories', label: 'Calories', railLabel: 'CAL', unit: 'kcal', maxLimit: 3200, color: '#FC990099' },
+  { key: 'protein', label: 'Protein', railLabel: 'PROTEIN', unit: 'g', maxLimit: 220, color: '#1B996699' },
+  { key: 'carbs', label: 'Carbs', railLabel: 'CARB', unit: 'g', maxLimit: 360, color: '#2B7FFF99' },
+  { key: 'fat', label: 'Fat', railLabel: 'FAT', unit: 'g', maxLimit: 140, color: '#8E51FF99' },
 ];
 
 export default function Settings() {
@@ -35,7 +36,16 @@ export default function Settings() {
     model: 'llama3.1',
     timeoutMs: 20000,
   });
+  const [whoop, setWhoop] = useState<WhoopConfig>({
+    clientId: '',
+    redirectUri: '',
+    authState: '',
+    authorizationCode: '',
+    connectedAt: null,
+  });
   const [ollamaSaved, setOllamaSaved] = useState(false);
+  const [whoopSaved, setWhoopSaved] = useState(false);
+  const [whoopMessage, setWhoopMessage] = useState<string | null>(null);
   const [ollamaTest, setOllamaTest] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
 
   useEffect(() => {
@@ -48,6 +58,26 @@ export default function Settings() {
       });
     });
     getOllamaConfig().then(setOllama);
+    getWhoopConfig().then((config) => {
+      const nextConfig = { ...config, redirectUri: config.redirectUri || defaultWhoopRedirectUri() };
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const state = params.get('state');
+      if (code && state && (!nextConfig.authState || state === nextConfig.authState)) {
+        const connectedConfig = {
+          ...nextConfig,
+          authorizationCode: code,
+          authState: state,
+          connectedAt: new Date().toISOString(),
+        };
+        setWhoop(connectedConfig);
+        setWhoopConfig(connectedConfig);
+        setWhoopMessage('WHOOP authorization code captured. Token exchange still needs a backend secret.');
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+      setWhoop(nextConfig);
+    });
     setLogs(getDevLogs());
   }, []);
 
@@ -55,6 +85,22 @@ export default function Settings() {
     await setOllamaConfig(ollama);
     setOllamaSaved(true);
     setTimeout(() => setOllamaSaved(false), 1500);
+  };
+
+  const handleSaveWhoop = async () => {
+    await setWhoopConfig(whoop);
+    setWhoopSaved(true);
+    setTimeout(() => setWhoopSaved(false), 1500);
+  };
+
+  const handleConnectWhoop = async () => {
+    const nextWhoop = {
+      ...whoop,
+      redirectUri: whoop.redirectUri || defaultWhoopRedirectUri(),
+      authState: makeWhoopState(),
+    };
+    await setWhoopConfig(nextWhoop);
+    window.location.href = buildWhoopAuthUrl(nextWhoop);
   };
 
   const handleTestOllama = async () => {
@@ -87,34 +133,21 @@ export default function Settings() {
   };
 
   return (
-    <div className="mx-auto max-w-md px-4 pb-28 pt-5">
-      <h1 className="text-[2rem] font-bold leading-tight tracking-normal text-neutral-950">Settings</h1>
+    <div className="min-h-full bg-white">
+      <div className="mx-auto max-w-md px-4 pb-28 pt-5">
+      <h1 className="text-[2rem] font-bold leading-tight tracking-normal text-neutral-950">Preferences</h1>
       <p className="mt-1 text-sm text-neutral-500">
-        Set a range instead of an exact number if you're not sure yet.
+        Set your macro ranges and tune the way Nutri works for you.
       </p>
 
-      <div className="mt-6 space-y-4 rounded-[1.5rem] bg-white p-4 shadow-sm shadow-neutral-200/70">
-        {FIELDS.map(({ key, label }) => (
-          <div key={key}>
-            <label className="text-xs font-semibold text-neutral-500">{label}</label>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-                inputMode="numeric"
-                placeholder="Min"
-                value={form[key].min}
-                onChange={(e) => updateField(key, 'min', e.target.value)}
-              />
-              <span className="text-sm text-neutral-400">–</span>
-              <input
-                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-                inputMode="numeric"
-                placeholder="Max"
-                value={form[key].max}
-                onChange={(e) => updateField(key, 'max', e.target.value)}
-              />
-            </div>
-          </div>
+      <div className="mt-4 space-y-1.5 rounded-lg bg-white">
+        {FIELDS.map((field) => (
+          <RangeSettingRow
+            key={field.key}
+            field={field}
+            value={form[field.key]}
+            onChange={(side, value) => updateField(field.key, side, value)}
+          />
         ))}
       </div>
 
@@ -124,6 +157,61 @@ export default function Settings() {
       >
         {saved ? 'Saved!' : 'Save'}
       </button>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-semibold text-neutral-900">WHOOP</h2>
+        <p className="mt-1 text-xs text-neutral-500">
+          Connect recovery, strain, sleep, workouts, and body metrics as context for your meal plan.
+        </p>
+
+        <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-white p-3">
+          <div>
+            <label className="text-xs font-semibold text-neutral-500">Client ID</label>
+            <input
+              className="mt-1 w-full rounded-lg border border-neutral-200 bg-white px-3 py-3 text-base outline-none focus:border-neutral-400"
+              placeholder="WHOOP Developer Dashboard client id"
+              value={whoop.clientId}
+              onChange={(event) => setWhoop((current) => ({ ...current, clientId: event.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-neutral-500">Redirect URL</label>
+            <input
+              className="mt-1 w-full rounded-lg border border-neutral-200 bg-white px-3 py-3 text-base outline-none focus:border-neutral-400"
+              value={whoop.redirectUri}
+              onChange={(event) => setWhoop((current) => ({ ...current, redirectUri: event.target.value }))}
+            />
+          </div>
+          <div className="rounded-lg bg-neutral-50 p-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400">Scopes</div>
+            <p className="mt-1 text-xs leading-5 text-neutral-600">{WHOOP_SCOPES.join(' · ')}</p>
+          </div>
+          {whoop.connectedAt && (
+            <p className="rounded-lg bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
+              Authorization code captured at {new Date(whoop.connectedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
+            </p>
+          )}
+          {whoopMessage && <p className="text-xs font-medium leading-5 text-amber-700">{whoopMessage}</p>}
+          <div className="flex gap-2">
+            <button
+              className="flex-1 rounded-lg bg-neutral-100 py-3 text-sm font-semibold text-neutral-800"
+              onClick={handleSaveWhoop}
+            >
+              {whoopSaved ? 'Saved!' : 'Save'}
+            </button>
+            <button
+              className="flex-1 rounded-lg bg-neutral-950 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={handleConnectWhoop}
+              disabled={!whoop.clientId || !(whoop.redirectUri || defaultWhoopRedirectUri())}
+            >
+              Connect WHOOP
+            </button>
+          </div>
+          <p className="text-[11px] leading-4 text-neutral-400">
+            Token exchange is intentionally not done in the browser because WHOOP uses a client secret.
+          </p>
+        </div>
+      </section>
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-neutral-900">AI Backend</h2>
@@ -254,6 +342,111 @@ export default function Settings() {
           </div>
         )}
       </section>
+    </div>
+    </div>
+  );
+}
+
+function RangeSettingRow({
+  field,
+  value,
+  onChange,
+}: {
+  field: { label: string; railLabel: string; unit: string; maxLimit: number; color: string };
+  value: RangeFields;
+  onChange: (side: 'min' | 'max', value: string) => void;
+}) {
+  const minValue = Number(value.min) || 0;
+  const maxValue = Math.max(Number(value.max) || 0, minValue);
+  const maxLimit = Math.max(field.maxLimit, maxValue, 1);
+  const minPosition = Math.min(100, Math.max(0, (minValue / maxLimit) * 100));
+  const maxPosition = Math.min(100, Math.max(0, (maxValue / maxLimit) * 100));
+
+  const updateMin = (next: string) => {
+    const numeric = Number(next) || 0;
+    onChange('min', String(Math.min(numeric, maxValue)));
+  };
+
+  const updateMax = (next: string) => {
+    const numeric = Number(next) || 0;
+    onChange('max', String(Math.max(numeric, minValue)));
+  };
+
+  return (
+    <div className="flex h-8 items-center gap-1.5">
+      <div className="relative h-8 min-w-0 flex-1 overflow-hidden rounded-lg bg-black/[0.04]">
+        <div className="absolute inset-0">
+          {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((tick) => (
+            <span
+              key={tick}
+              className="absolute top-1/2 h-2 w-px -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/[0.06]"
+              style={{ left: `${tick}%` }}
+            />
+          ))}
+          <div
+            className="absolute inset-y-0 rounded-lg"
+            style={{ left: `${minPosition}%`, width: `${Math.max(3, maxPosition - minPosition)}%`, backgroundColor: field.color }}
+          />
+        </div>
+        <div
+          className="pointer-events-none absolute top-2 h-[17px] w-px rounded-full bg-[#dbdbdb]"
+          style={{ left: `${minPosition}%` }}
+        />
+        <div
+          className="pointer-events-none absolute top-2 h-[17px] w-px rounded-full bg-[#dbdbdb]"
+          style={{ left: `${maxPosition}%` }}
+        />
+        <div className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase leading-none tracking-[0.06em] text-black">
+          {field.railLabel}
+        </div>
+        <input
+          className="range-slider-thumb range-slider-max absolute inset-0 z-30 h-full w-full cursor-ew-resize appearance-none bg-transparent"
+          type="range"
+          min={0}
+          max={maxLimit}
+          step={field.unit === 'kcal' ? 25 : 1}
+          aria-label={`${field.label} maximum`}
+          value={maxValue}
+          onChange={(event) => updateMax(event.target.value)}
+        />
+        <input
+          className="range-slider-thumb range-slider-min absolute inset-0 z-20 h-full w-full cursor-ew-resize appearance-none bg-transparent"
+          type="range"
+          min={0}
+          max={maxLimit}
+          step={field.unit === 'kcal' ? 25 : 1}
+          aria-label={`${field.label} minimum`}
+          value={minValue}
+          onChange={(event) => updateMin(event.target.value)}
+        />
+      </div>
+
+      <input
+        className="h-8 w-12 shrink-0 rounded-lg bg-black/[0.04] px-1.5 text-right text-black/95 outline-none transition focus:bg-black/[0.07]"
+        inputMode="numeric"
+        aria-label={`${field.label} minimum value`}
+        value={value.min}
+        onChange={(event) => updateMin(event.target.value)}
+        style={{
+          fontFamily: 'ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+          fontSize: '10px',
+          fontWeight: 400,
+          lineHeight: '100%',
+        }}
+      />
+      <input
+        className="h-8 w-12 shrink-0 rounded-lg bg-black/[0.04] px-1.5 text-right text-black/95 outline-none transition focus:bg-black/[0.07]"
+        inputMode="numeric"
+        aria-label={`${field.label} maximum value`}
+        value={value.max}
+        onChange={(event) => updateMax(event.target.value)}
+        style={{
+          fontFamily: 'ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+          fontSize: '10px',
+          fontWeight: 400,
+          lineHeight: '100%',
+        }}
+      />
     </div>
   );
 }

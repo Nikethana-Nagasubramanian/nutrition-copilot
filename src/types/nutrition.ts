@@ -7,7 +7,8 @@ export interface Macros {
 
 export interface ParsedFoodItem extends Macros {
   name: string;
-  confidence: 'high' | 'low';
+  quantity?: string;
+  confidence: 'high' | 'medium' | 'low';
 }
 
 export interface ParsedMeal {
@@ -59,4 +60,12 @@ export interface OllamaConfig {
   baseUrl: string; // e.g. https://desktop.tailXXXX.ts.net or http://100.x.y.z:11434
   model: string; // e.g. llama3.1
   timeoutMs: number;
+}
+
+export interface WhoopConfig {
+  clientId: string;
+  redirectUri: string;
+  authState: string;
+  authorizationCode: string;
+  connectedAt: string | null;
 }

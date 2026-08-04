@@ -5,6 +5,18 @@ import './index.css'
 import App from './App.tsx'
 import { addDevLog, formatUnknownError } from './services/devLogs'
 
+if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+    .catch(() => undefined);
+}
+
+if (import.meta.env.DEV && 'caches' in window) {
+  caches.keys()
+    .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+    .catch(() => undefined);
+}
+
 window.addEventListener('error', (event) => {
   addDevLog({
     level: 'error',
