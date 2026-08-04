@@ -67,5 +67,44 @@ export interface WhoopConfig {
   redirectUri: string;
   authState: string;
   authorizationCode: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string | null;
+  tokenType: string;
+  scope: string;
   connectedAt: string | null;
+  lastSyncAt: string | null;
+  lastSummary: WhoopSummary | null;
+}
+
+export interface WhoopSummary {
+  profile?: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+  } | null;
+  cycle?: {
+    strain?: number | null;
+    kilojoule?: number | null;
+    averageHeartRate?: number | null;
+    maxHeartRate?: number | null;
+  } | null;
+  recovery?: {
+    score?: number | null;
+    hrvRmssdMilli?: number | null;
+    restingHeartRate?: number | null;
+    spo2Percentage?: number | null;
+  } | null;
+  sleep?: {
+    performancePercentage?: number | null;
+    efficiencyPercentage?: number | null;
+    consistencyPercentage?: number | null;
+    totalSleepHours?: number | null;
+  } | null;
+  workouts?: Array<{
+    sportName?: string | null;
+    strain?: number | null;
+    kilojoule?: number | null;
+    averageHeartRate?: number | null;
+  }>;
 }

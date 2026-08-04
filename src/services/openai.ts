@@ -73,7 +73,8 @@ export async function parseMealFromAudio(audioBlob: Blob): Promise<ParsedMeal> {
 export async function askNutritionQuestion(
   question: string,
   todayTotals: string,
-  targets: string
+  targets: string,
+  whoopContext?: string | null
 ): Promise<AskNutritionResult> {
   const content = await getCompletion({
     source: 'askNutritionQuestion',
@@ -84,6 +85,7 @@ Rules:
 - Do not assume extra servings, add-ons, eggs, sides, or toppings unless named.
 - Estimate conservatively: never overestimate protein, never underestimate calories.
 - Suggestions are allowed, but keep them short and directly tied to the user's remaining macros.
+- If WHOOP context is provided, use it only when relevant. High strain can justify more carbs/fuel; low recovery or poor sleep should bias toward protein-forward, steady meals. Keep it specific and brief.
 - Return ONLY valid JSON matching this exact shape, no prose, no markdown fences:
 {
   "verdict": "yes" | "caution" | "no",
@@ -96,7 +98,7 @@ Rules:
   "suggestion": string | null
 }
 Summary must be one short sentence. Remaining values may be negative when over target.`,
-    user: `Today so far: ${todayTotals}\nDaily targets: ${targets}\nQuestion: ${question}`,
+    user: `Today so far: ${todayTotals}\nDaily targets: ${targets}\nWHOOP context: ${whoopContext || 'not connected or not synced'}\nQuestion: ${question}`,
   });
 
   const parsed = extractJson(content) as AskNutritionResult;

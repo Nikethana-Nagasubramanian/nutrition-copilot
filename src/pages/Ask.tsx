@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AskResultCard } from '../components/AskResultCard';
 import { getEntriesForDate, todayKey } from '../db/logEntries';
-import { getDailyTargets } from '../db/settings';
+import { getDailyTargets, getWhoopConfig } from '../db/settings';
 import { askNutritionQuestion } from '../services/openai';
-import type { AskNutritionResult, DailyTargets, LoggedEntry, Macros } from '../types/nutrition';
+import { whoopNutritionContext } from '../services/whoop';
+import type { AskNutritionResult, DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
 const ZERO_MACROS: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
 const ZERO_RANGE = { min: 0, max: 0 };
@@ -33,11 +34,13 @@ export default function Ask() {
   const [answer, setAnswer] = useState<AskNutritionResult | null>(null);
   const [isAsking, setIsAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [whoopSummary, setWhoopSummary] = useState<WhoopSummary | null>(null);
 
   const refresh = useCallback(async () => {
-    const [entries, dailyTargets] = await Promise.all([getEntriesForDate(todayKey()), getDailyTargets()]);
+    const [entries, dailyTargets, whoopConfig] = await Promise.all([getEntriesForDate(todayKey()), getDailyTargets(), getWhoopConfig()]);
     setTotals(sumEntries(entries));
     setTargets(dailyTargets);
+    setWhoopSummary(whoopConfig.lastSummary);
   }, []);
 
   useEffect(() => {
@@ -53,7 +56,7 @@ export default function Ask() {
     try {
       const totalsStr = `${Math.round(totals.calories)} kcal, ${Math.round(totals.protein)}g protein, ${Math.round(totals.carbs)}g carbs, ${Math.round(totals.fat)}g fat`;
       const targetsStr = `${targets.calories.min}-${targets.calories.max} kcal, ${targets.protein.min}-${targets.protein.max}g protein, ${targets.carbs.min}-${targets.carbs.max}g carbs, ${targets.fat.min}-${targets.fat.max}g fat`;
-      const result = await askNutritionQuestion(trimmed, totalsStr, targetsStr);
+      const result = await askNutritionQuestion(trimmed, totalsStr, targetsStr, whoopNutritionContext(whoopSummary));
       setAnswer(result);
     } catch (err: any) {
       setError(err?.message ?? 'Could not get an answer.');
@@ -97,6 +100,12 @@ export default function Ask() {
         <TodayMini label="Calories" value={totals.calories} target={targets.calories.max} unit="kcal" />
         <TodayMini label="Protein" value={totals.protein} target={targets.protein.max} unit="g" />
       </div>
+
+      {whoopSummary && (
+        <p className="mt-3 rounded-lg bg-neutral-50 px-3 py-2 text-xs font-medium leading-5 text-neutral-500">
+          WHOOP context on: {whoopNutritionContext(whoopSummary)}
+        </p>
+      )}
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {answer && <AskResultCard result={answer} targets={targets} />}

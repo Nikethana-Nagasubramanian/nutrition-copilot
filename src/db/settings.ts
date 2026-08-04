@@ -24,7 +24,14 @@ const DEFAULT_WHOOP_CONFIG: WhoopConfig = {
   redirectUri: '',
   authState: '',
   authorizationCode: '',
+  accessToken: '',
+  refreshToken: '',
+  expiresAt: null,
+  tokenType: 'bearer',
+  scope: '',
   connectedAt: null,
+  lastSyncAt: null,
+  lastSummary: null,
 };
 
 export async function getDailyTargets(): Promise<DailyTargets> {

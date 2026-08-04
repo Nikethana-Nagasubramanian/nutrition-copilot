@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { getDailyTargets, getOllamaConfig, getWhoopConfig, setDailyTargets, setOllamaConfig, setWhoopConfig } from '../db/settings';
-import { clearDevLogs, getDevLogs, type DevLogEntry } from '../services/devLogs';
-import { buildWhoopAuthUrl, defaultWhoopRedirectUri, makeWhoopState, WHOOP_SCOPES } from '../services/whoop';
+import { addDevLog, clearDevLogs, getDevLogs, type DevLogEntry } from '../services/devLogs';
+import {
+  buildWhoopAuthUrl,
+  defaultWhoopRedirectUri,
+  ensureWhoopAccess,
+  exchangeWhoopCode,
+  fetchWhoopSummary,
+  makeWhoopState,
+  WHOOP_SCOPES,
+} from '../services/whoop';
 import type { DailyTargets, OllamaConfig, WhoopConfig } from '../types/nutrition';
 
 interface RangeFields {
@@ -41,11 +49,19 @@ export default function Settings() {
     redirectUri: '',
     authState: '',
     authorizationCode: '',
+    accessToken: '',
+    refreshToken: '',
+    expiresAt: null,
+    tokenType: 'bearer',
+    scope: '',
     connectedAt: null,
+    lastSyncAt: null,
+    lastSummary: null,
   });
   const [ollamaSaved, setOllamaSaved] = useState(false);
   const [whoopSaved, setWhoopSaved] = useState(false);
   const [whoopMessage, setWhoopMessage] = useState<string | null>(null);
+  const [whoopSyncing, setWhoopSyncing] = useState(false);
   const [ollamaTest, setOllamaTest] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
 
   useEffect(() => {
@@ -58,22 +74,23 @@ export default function Settings() {
       });
     });
     getOllamaConfig().then(setOllama);
-    getWhoopConfig().then((config) => {
+    getWhoopConfig().then(async (config) => {
       const nextConfig = { ...config, redirectUri: config.redirectUri || defaultWhoopRedirectUri() };
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
       const state = params.get('state');
       if (code && state && (!nextConfig.authState || state === nextConfig.authState)) {
-        const connectedConfig = {
-          ...nextConfig,
-          authorizationCode: code,
-          authState: state,
-          connectedAt: new Date().toISOString(),
-        };
-        setWhoop(connectedConfig);
-        setWhoopConfig(connectedConfig);
-        setWhoopMessage('WHOOP authorization code captured. Token exchange still needs a backend secret.');
-        window.history.replaceState({}, '', window.location.pathname);
+        try {
+          const connectedConfig = await exchangeWhoopCode({ ...nextConfig, authState: state }, code);
+          setWhoop(connectedConfig);
+          await setWhoopConfig(connectedConfig);
+          setWhoopMessage('WHOOP connected. Sync when you want to pull today’s recovery/sleep/workout context.');
+          window.history.replaceState({}, '', window.location.pathname);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'WHOOP token exchange failed.';
+          setWhoopMessage(message);
+          addDevLog({ level: 'error', source: 'WHOOP', message: 'Token exchange failed.', details: message });
+        }
         return;
       }
       setWhoop(nextConfig);
@@ -101,6 +118,30 @@ export default function Settings() {
     };
     await setWhoopConfig(nextWhoop);
     window.location.href = buildWhoopAuthUrl(nextWhoop);
+  };
+
+  const handleSyncWhoop = async () => {
+    setWhoopSyncing(true);
+    setWhoopMessage(null);
+    try {
+      const authorized = await ensureWhoopAccess(whoop);
+      const summary = await fetchWhoopSummary(authorized);
+      const syncedConfig = {
+        ...authorized,
+        lastSummary: summary,
+        lastSyncAt: new Date().toISOString(),
+      };
+      setWhoop(syncedConfig);
+      await setWhoopConfig(syncedConfig);
+      setWhoopMessage('WHOOP synced.');
+      addDevLog({ level: 'info', source: 'WHOOP', message: 'WHOOP summary synced.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'WHOOP sync failed.';
+      setWhoopMessage(message);
+      addDevLog({ level: 'error', source: 'WHOOP', message: 'WHOOP sync failed.', details: message });
+    } finally {
+      setWhoopSyncing(false);
+    }
   };
 
   const handleTestOllama = async () => {
@@ -165,6 +206,11 @@ export default function Settings() {
         </p>
 
         <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-white p-3">
+          <div className="rounded-lg bg-neutral-50 p-3 text-xs leading-5 text-neutral-600">
+            <div><span className="font-semibold text-neutral-900">Redirect URL:</span> paste the exact value below into WHOOP.</div>
+            <div><span className="font-semibold text-neutral-900">Privacy URL:</span> any public placeholder page you control is fine for dev.</div>
+            <div><span className="font-semibold text-neutral-900">Server env:</span> add <span className="font-mono">WHOOP_CLIENT_SECRET</span> to your local <span className="font-mono">.env</span>.</div>
+          </div>
           <div>
             <label className="text-xs font-semibold text-neutral-500">Client ID</label>
             <input
@@ -188,9 +234,10 @@ export default function Settings() {
           </div>
           {whoop.connectedAt && (
             <p className="rounded-lg bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
-              Authorization code captured at {new Date(whoop.connectedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
+              Connected at {new Date(whoop.connectedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
             </p>
           )}
+          {whoop.lastSummary && <WhoopSummaryCard whoop={whoop} />}
           {whoopMessage && <p className="text-xs font-medium leading-5 text-amber-700">{whoopMessage}</p>}
           <div className="flex gap-2">
             <button
@@ -207,9 +254,13 @@ export default function Settings() {
               Connect WHOOP
             </button>
           </div>
-          <p className="text-[11px] leading-4 text-neutral-400">
-            Token exchange is intentionally not done in the browser because WHOOP uses a client secret.
-          </p>
+          <button
+            className="w-full rounded-lg border border-neutral-200 bg-white py-3 text-sm font-semibold text-neutral-900 disabled:opacity-50"
+            onClick={handleSyncWhoop}
+            disabled={!whoop.accessToken || whoopSyncing}
+          >
+            {whoopSyncing ? 'Syncing WHOOP...' : 'Sync WHOOP context'}
+          </button>
         </div>
       </section>
 
@@ -345,6 +396,58 @@ export default function Settings() {
     </div>
     </div>
   );
+}
+
+function WhoopSummaryCard({ whoop }: { whoop: WhoopConfig }) {
+  const summary = whoop.lastSummary;
+  if (!summary) return null;
+
+  const caloriesBurned = summary.cycle?.kilojoule ? Math.round(summary.cycle.kilojoule / 4.184) : null;
+  const workoutCount = summary.workouts?.length ?? 0;
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400">Latest WHOOP context</div>
+          {whoop.lastSyncAt && (
+            <div className="mt-1 text-[11px] text-neutral-400">
+              Synced {new Date(whoop.lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </div>
+          )}
+        </div>
+        {summary.profile?.firstName && (
+          <div className="text-right text-xs font-semibold text-neutral-700">{summary.profile.firstName}</div>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <WhoopMetric label="Strain" value={formatOptional(summary.cycle?.strain, 1)} />
+        <WhoopMetric label="Recovery" value={summary.recovery?.score == null ? '—' : `${Math.round(summary.recovery.score)}%`} />
+        <WhoopMetric label="Sleep" value={summary.sleep?.performancePercentage == null ? '—' : `${Math.round(summary.sleep.performancePercentage)}%`} />
+        <WhoopMetric label="Burned" value={caloriesBurned == null ? '—' : `${caloriesBurned} kcal`} />
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-neutral-500">
+        {workoutCount > 0
+          ? `${workoutCount} workout${workoutCount === 1 ? '' : 's'} found in the last day.`
+          : 'No workout found in the last day.'}
+      </p>
+    </div>
+  );
+}
+
+function WhoopMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-neutral-50 p-2">
+      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-neutral-950">{value}</div>
+    </div>
+  );
+}
+
+function formatOptional(value: number | null | undefined, digits = 0) {
+  return value == null ? '—' : value.toFixed(digits);
 }
 
 function RangeSettingRow({

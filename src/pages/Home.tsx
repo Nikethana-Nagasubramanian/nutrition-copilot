@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'rea
 import { MacroSummary } from '../components/MacroSummary';
 import { addLoggedEntry, deleteLoggedEntry, getEntriesForDate, todayKey, updateLoggedEntry } from '../db/logEntries';
 import { createRecurringMeal, findRecurringMealByName } from '../db/recurringMeals';
-import { getDailyTargets } from '../db/settings';
+import { getDailyTargets, getWhoopConfig } from '../db/settings';
 import { addDevLog } from '../services/devLogs';
 import { parseMealDescription } from '../services/openai';
 import { transcribeAudio } from '../services/transcription';
-import type { DailyTargets, LoggedEntry, Macros } from '../types/nutrition';
+import { whoopMealNudge } from '../services/whoop';
+import type { DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
 const ZERO_MACROS: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
 const ZERO_RANGE = { min: 0, max: 0 };
@@ -206,7 +207,10 @@ function addMacros(a: Macros, b: Macros): Macros {
   };
 }
 
-function mealFeedback(meal: Macros, dayAfterMeal: Macros, targets: DailyTargets): MealFeedback {
+function mealFeedback(meal: Macros, dayAfterMeal: Macros, targets: DailyTargets, whoopSummary?: WhoopSummary | null): MealFeedback {
+  const whoopNudge = whoopMealNudge(whoopSummary, meal);
+  if (whoopNudge) return { text: whoopNudge, tone: 'blue' };
+
   const proteinRemaining = Math.max(0, targets.protein.max - dayAfterMeal.protein);
   const proteinRatio = meal.protein / Math.max(meal.calories, 1);
   const carbHeavy = meal.carbs >= 45 && meal.protein < 18;
@@ -266,6 +270,7 @@ export default function Home() {
   const [weekSummaries, setWeekSummaries] = useState<DaySummary[]>([]);
   const [monthSummaries, setMonthSummaries] = useState<DaySummary[]>([]);
   const [targets, setTargets] = useState<DailyTargets>(ZERO_TARGETS);
+  const [whoopSummary, setWhoopSummary] = useState<WhoopSummary | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('today');
   const [input, setInput] = useState('');
   const [isBusy, setIsBusy] = useState(false);
@@ -302,10 +307,11 @@ export default function Home() {
   const refresh = useCallback(async () => {
     const monthKeys = pastDaysKeys(MONTH_DAYS);
     const weekKeys = monthKeys.slice(-WEEK_DAYS);
-    const [e, t, weekEntries] = await Promise.all([
+    const [e, t, weekEntries, whoopConfig] = await Promise.all([
       getEntriesForDate(todayKey()),
       getDailyTargets(),
       Promise.all(monthKeys.map((key) => getEntriesForDate(key))),
+      getWhoopConfig(),
     ]);
     setEntries(e);
     const monthData = monthKeys.map((key, index) => ({
@@ -317,6 +323,7 @@ export default function Home() {
     setMonthSummaries(monthData);
     setWeekSummaries(monthData.filter((day) => weekKeys.includes(day.dateKey)));
     setTargets(t);
+    setWhoopSummary(whoopConfig.lastSummary);
   }, []);
 
   useEffect(() => {
@@ -355,7 +362,7 @@ export default function Home() {
   }, [entries, selectedEntryId]);
 
   const logDirect = async (description: string, macros: Macros, sourceMealId: string | null = null) => {
-    setFeedback(mealFeedback(macros, addMacros(totals, macros), targets));
+    setFeedback(mealFeedback(macros, addMacros(totals, macros), targets, whoopSummary));
     await addLoggedEntry(description, macros, sourceMealId);
     await refresh();
   };
