@@ -176,7 +176,7 @@ export default function Settings() {
   return (
     <div className="min-h-full bg-white">
       <div className="mx-auto max-w-md px-4 pb-28 pt-5">
-      <h1 className="text-[2rem] font-bold leading-tight tracking-normal text-neutral-950">Preferences</h1>
+      <h1 className="text-[2rem] font-bold leading-tight text-neutral-950">Preferences</h1>
       <p className="mt-1 text-sm text-neutral-500">
         Set your macro ranges and tune the way Nutri works for you.
       </p>
@@ -229,7 +229,7 @@ export default function Settings() {
             />
           </div>
           <div className="rounded-lg bg-neutral-50 p-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400">Scopes</div>
+            <div className="text-[10px] font-bold uppercase text-neutral-400">Scopes</div>
             <p className="mt-1 text-xs leading-5 text-neutral-600">{WHOOP_SCOPES.join(' · ')}</p>
           </div>
           {whoop.connectedAt && (
@@ -374,7 +374,7 @@ export default function Settings() {
               <article key={log.id} className="rounded-2xl bg-white p-4 shadow-sm shadow-neutral-200/70">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-red-600">
+                    <div className="text-xs font-semibold uppercase text-red-600">
                       {log.level} · {log.source}
                     </div>
                     <div className="mt-1 text-sm font-semibold text-neutral-900">{log.message}</div>
@@ -409,7 +409,7 @@ function WhoopSummaryCard({ whoop }: { whoop: WhoopConfig }) {
     <div className="rounded-lg border border-neutral-200 bg-white p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400">Latest WHOOP context</div>
+          <div className="text-[10px] font-bold uppercase text-neutral-400">Latest WHOOP context</div>
           {whoop.lastSyncAt && (
             <div className="mt-1 text-[11px] text-neutral-400">
               Synced {new Date(whoop.lastSyncAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
@@ -440,7 +440,7 @@ function WhoopSummaryCard({ whoop }: { whoop: WhoopConfig }) {
 function WhoopMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-neutral-50 p-2">
-      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400">{label}</div>
+      <div className="text-[10px] font-bold uppercase text-neutral-400">{label}</div>
       <div className="mt-1 text-sm font-semibold text-neutral-950">{value}</div>
     </div>
   );
@@ -499,7 +499,7 @@ function RangeSettingRow({
           className="pointer-events-none absolute top-2 h-[17px] w-px rounded-full bg-[#dbdbdb]"
           style={{ left: `${maxPosition}%` }}
         />
-        <div className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase leading-none tracking-[0.06em] text-black">
+        <div className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase leading-none text-black">
           {field.railLabel}
         </div>
         <input

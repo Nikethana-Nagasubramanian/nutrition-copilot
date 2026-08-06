@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AskResultCard } from '../components/AskResultCard';
+import { MacroSummary } from '../components/MacroSummary';
 import { getEntriesForDate, todayKey } from '../db/logEntries';
 import { getDailyTargets, getWhoopConfig } from '../db/settings';
+import { useRecorder } from '../hooks/useRecorder';
+import { addDevLog } from '../services/devLogs';
 import { askNutritionQuestion } from '../services/openai';
+import { transcribeAudio } from '../services/transcription';
 import { whoopNutritionContext } from '../services/whoop';
 import type { AskNutritionResult, DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
@@ -33,8 +37,40 @@ export default function Ask() {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<AskNutritionResult | null>(null);
   const [isAsking, setIsAsking] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [whoopSummary, setWhoopSummary] = useState<WhoopSummary | null>(null);
+
+  const handleRecordingStop = useCallback(async (blob: Blob) => {
+    setIsTranscribing(true);
+    setError(null);
+    try {
+      const transcript = await transcribeAudio(blob);
+      setQuestion((current) => `${current.trim()}${current.trim() ? ' ' : ''}${transcript}`.trim());
+    } catch (err) {
+      addDevLog({
+        level: 'error',
+        source: 'Ask.Voice',
+        message: 'Ask voice transcription failed.',
+        details: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+      });
+      setError("I couldn't transcribe that. Try again, or use the keyboard mic.");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, []);
+
+  const handleRecordingError = useCallback((err: unknown) => {
+    addDevLog({
+      level: 'error',
+      source: 'Ask.Voice',
+      message: 'Could not start Ask voice recording.',
+      details: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+    });
+    setError('Microphone access was blocked. Allow access and try again.');
+  }, []);
+
+  const { isRecording, startRecording, stopRecording } = useRecorder(handleRecordingStop, handleRecordingError);
 
   const refresh = useCallback(async () => {
     const [entries, dailyTargets, whoopConfig] = await Promise.all([getEntriesForDate(todayKey()), getDailyTargets(), getWhoopConfig()]);
@@ -58,47 +94,58 @@ export default function Ask() {
       const targetsStr = `${targets.calories.min}-${targets.calories.max} kcal, ${targets.protein.min}-${targets.protein.max}g protein, ${targets.carbs.min}-${targets.carbs.max}g carbs, ${targets.fat.min}-${targets.fat.max}g fat`;
       const result = await askNutritionQuestion(trimmed, totalsStr, targetsStr, whoopNutritionContext(whoopSummary));
       setAnswer(result);
-    } catch (err: any) {
-      setError(err?.message ?? 'Could not get an answer.');
+    } catch (err) {
+      addDevLog({
+        level: 'error',
+        source: 'Ask',
+        message: 'Nutrition question failed.',
+        details: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+      });
+      setError("I couldn't check that yet. Try again, or check Developer Logs for details.");
     } finally {
       setIsAsking(false);
     }
   };
 
   return (
-    <div className="mx-auto max-w-md px-4 pb-28 pt-5">
-      <h1 className="text-[2rem] font-bold leading-tight tracking-normal text-neutral-950">Ask Nutri</h1>
-      <p className="mt-1 text-sm leading-5 text-neutral-500">
+    <div className="log-paper-screen mx-auto max-w-md px-3 pb-24 pt-[72px]">
+      <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Ask Nutri</h1>
+      <p className="mt-2 text-sm leading-5 text-neutral-500">
         Ask Nutri how a meal fits into your meal plan today.
       </p>
 
-      <div className="ask-composer mt-6">
+      <div className="ask-composer mt-7">
         <textarea
-          className="h-full w-full resize-none bg-transparent px-4 py-4 pb-16 text-base leading-6 text-neutral-950 outline-none placeholder:text-neutral-400"
+          className="ask-composer-input"
           placeholder="Can I have pizza tonight?"
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) handleAsk();
           }}
-          disabled={isAsking}
+          disabled={isAsking || isTranscribing}
         />
-        <button className="ask-composer-mic" type="button" aria-label="Voice input">
-          <MicIcon />
+        <button
+          className={`ask-composer-mic ${isRecording ? 'is-recording' : ''}`}
+          type="button"
+          aria-label={isRecording ? 'Stop recording' : 'Voice input'}
+          onClick={isRecording ? stopRecording : startRecording}
+          disabled={isAsking || isTranscribing}
+        >
+          {isRecording ? <span className="voice-stop-glyph" /> : <MicIcon />}
         </button>
         <button
           className="ask-composer-action"
           onClick={handleAsk}
-          disabled={isAsking || !question.trim()}
+          disabled={isAsking || isRecording || isTranscribing || !question.trim()}
         >
-          <span>{isAsking ? 'Checking...' : 'Ask'}</span>
-          {!isAsking && <ArrowUpIcon />}
+          <span>{isTranscribing ? 'Transcribing...' : isAsking ? 'Checking...' : 'Ask'}</span>
+          {!isAsking && !isTranscribing && <ArrowUpIcon />}
         </button>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <TodayMini label="Calories" value={totals.calories} target={targets.calories.max} unit="kcal" />
-        <TodayMini label="Protein" value={totals.protein} target={targets.protein.max} unit="g" />
+      <div className="mt-6">
+        <MacroSummary totals={totals} targets={targets} />
       </div>
 
       {whoopSummary && (
@@ -129,16 +176,5 @@ function ArrowUpIcon() {
       <path d="M12 19V5" />
       <path d="m5 12 7-7 7 7" />
     </svg>
-  );
-}
-
-function TodayMini({ label, value, target, unit }: { label: string; value: number; target: number; unit: string }) {
-  return (
-    <div className="rounded-2xl bg-white p-3 shadow-sm shadow-neutral-200/70">
-      <div className="text-xs font-semibold text-neutral-500">{label} today</div>
-      <div className="mt-1 text-sm font-bold text-neutral-950">
-        {Math.round(value)} / {Math.round(target)} {unit}
-      </div>
-    </div>
   );
 }

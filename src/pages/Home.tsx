@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { MacroSummary } from '../components/MacroSummary';
 import { addLoggedEntry, deleteLoggedEntry, getEntriesForDate, todayKey, updateLoggedEntry } from '../db/logEntries';
 import { createRecurringMeal, findRecurringMealByName } from '../db/recurringMeals';
@@ -21,6 +21,7 @@ const WEEK_DAYS = 7;
 const MONTH_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MEAL_ACTION_WIDTH = 96;
+const SERVER_TRANSCRIPTION_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_SERVER_TRANSCRIPTION === 'true';
 
 type ViewMode = 'today' | 'week' | 'month';
 type FeedbackTone = 'green' | 'blue' | 'pink' | 'orange';
@@ -40,6 +41,7 @@ type MealFeedback = {
 };
 type ComposerState = 'idle' | 'logging' | 'logged';
 type VoiceState = 'idle' | 'recording' | 'transcribing';
+type ComposerUiState = 'idle' | 'typing' | 'recording' | 'transcribing' | 'transcribed' | 'sending' | 'feedback';
 type SwipeLock = 'x' | 'y' | null;
 type SwipeGesture = {
   id: string;
@@ -240,18 +242,18 @@ function mealBadge(entry: Macros): MealBadge {
   if (proteinFilled) {
     return {
       label: 'Protein filled',
-      className: 'bg-[#262626] text-white',
+      className: 'bg-emerald-50 text-emerald-700',
     };
   }
   if (carbHeavy) {
     return {
       label: 'Carb heavy',
-      className: 'bg-[#262626] text-white',
+      className: 'bg-amber-50 text-amber-700',
     };
   }
   return {
     label: 'Balanced',
-    className: 'bg-[#262626] text-white',
+    className: 'bg-[#eaf5ef] text-[#16703a]',
   };
 }
 
@@ -278,15 +280,20 @@ export default function Home() {
   const [note, setNote] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<MealFeedback | null>(null);
   const [composerState, setComposerState] = useState<ComposerState>('idle');
+  const [isMealSheetOpen, setIsMealSheetOpen] = useState(false);
+  const [sheetDragY, setSheetDragY] = useState(0);
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
-  const [voiceTranscript, setVoiceTranscript] = useState('');
-  const [voiceInterim, setVoiceInterim] = useState('');
-  const [voiceStartedAt, setVoiceStartedAt] = useState<number | null>(null);
-  const [voiceElapsed, setVoiceElapsed] = useState(0);
+  const [isVoiceReview, setIsVoiceReview] = useState(false);
+  const [isComposerMultiline, setIsComposerMultiline] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioFrameRef = useRef<number | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const sheetDragRef = useRef<{ startY: number; lastY: number; lastT: number; velocity: number } | null>(null);
   const stopRequestedRef = useRef(false);
   const voiceTranscriptRef = useRef('');
   const voiceInterimRef = useRef('');
@@ -302,6 +309,7 @@ export default function Home() {
   const [swipeDrag, setSwipeDrag] = useState<{ id: string; offset: number; isDragging: boolean } | null>(null);
   const [suppressClickId, setSuppressClickId] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const periodTabsRef = useRef<HTMLDivElement | null>(null);
   const swipeGestureRef = useRef<SwipeGesture | null>(null);
 
   const refresh = useCallback(async () => {
@@ -331,12 +339,16 @@ export default function Home() {
   }, [refresh]);
 
   useEffect(() => {
-    if (voiceState !== 'recording' || voiceStartedAt === null) return;
-    const id = window.setInterval(() => {
-      setVoiceElapsed(Math.floor((Date.now() - voiceStartedAt) / 1000));
-    }, 250);
-    return () => window.clearInterval(id);
-  }, [voiceStartedAt, voiceState]);
+    const inputEl = composerInputRef.current;
+    if (!inputEl || voiceState !== 'idle') {
+      setIsComposerMultiline(false);
+      return;
+    }
+    inputEl.style.height = '32px';
+    const isWrapped = inputEl.scrollHeight > 36;
+    setIsComposerMultiline(isWrapped);
+    inputEl.style.height = isWrapped ? `${Math.min(inputEl.scrollHeight, 96)}px` : '32px';
+  }, [input, voiceState]);
 
   useEffect(() => {
     return () => {
@@ -345,6 +357,7 @@ export default function Home() {
       if (mediaRecorderRef.current?.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
+      stopVoiceMeter();
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       mediaRecorderRef.current = null;
       mediaStreamRef.current = null;
@@ -367,6 +380,16 @@ export default function Home() {
     await refresh();
   };
 
+  const showMealError = (message: string, err: unknown) => {
+    addDevLog({
+      level: 'error',
+      source: 'LogMeal',
+      message,
+      details: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+    });
+    setError("I couldn't calculate that yet. Try again, or check Developer Logs for details.");
+  };
+
   const submitText = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -385,8 +408,8 @@ export default function Home() {
         setComposerState('idle');
         await refresh();
         if (parsed.lowConfidenceNote) setNote(parsed.lowConfidenceNote);
-      } catch (err: any) {
-        setError(err?.message ?? 'Something went wrong.');
+      } catch (err) {
+        showMealError('Editing a logged meal failed.', err);
         setComposerState('idle');
       } finally {
         setIsBusy(false);
@@ -402,8 +425,8 @@ export default function Home() {
         await logDirect(recurring.name, recurring, recurring.id);
         setInput('');
         setComposerState('logged');
-      } catch (err: any) {
-        setError(err?.message ?? 'Something went wrong.');
+      } catch (err) {
+        showMealError('Logging a recurring meal failed.', err);
         setComposerState('idle');
       } finally {
         setIsBusy(false);
@@ -425,8 +448,8 @@ export default function Home() {
       setInput('');
       setComposerState('logged');
       if (parsed.lowConfidenceNote) setNote(parsed.lowConfidenceNote);
-    } catch (err: any) {
-      setError(err?.message ?? 'Something went wrong.');
+    } catch (err) {
+      showMealError('Logging a meal from text failed.', err);
       setComposerState('idle');
     } finally {
       setIsBusy(false);
@@ -436,6 +459,7 @@ export default function Home() {
   const startAudioRecording = async (): Promise<boolean> => {
     const stream = await requestMicrophoneAccess();
     if (!stream) return false;
+    startVoiceMeter(stream);
 
     if (!('MediaRecorder' in window)) {
       mediaStreamRef.current = stream;
@@ -471,6 +495,7 @@ export default function Home() {
     const recorder = mediaRecorderRef.current;
     const stream = mediaStreamRef.current;
     if (!recorder || recorder.state === 'inactive') {
+      stopVoiceMeter();
       stream?.getTracks().forEach((track) => track.stop());
       mediaRecorderRef.current = null;
       mediaStreamRef.current = null;
@@ -482,6 +507,7 @@ export default function Home() {
         const blob = audioChunksRef.current.length
           ? new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
           : null;
+        stopVoiceMeter();
         stream?.getTracks().forEach((track) => track.stop());
         audioChunksRef.current = [];
         mediaRecorderRef.current = null;
@@ -500,6 +526,7 @@ export default function Home() {
       recorder.stop();
     }
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    stopVoiceMeter();
     audioChunksRef.current = [];
     mediaRecorderRef.current = null;
     mediaStreamRef.current = null;
@@ -529,18 +556,21 @@ export default function Home() {
       addDevLog({
         level: 'warn',
         source: 'Voice',
-        message: 'SpeechRecognition is not available; using recorded-audio transcription only.',
+        message: SERVER_TRANSCRIPTION_ENABLED
+          ? 'SpeechRecognition is not available; using recorded-audio transcription only.'
+          : 'SpeechRecognition is not available and server transcription is disabled.',
         details: voiceDebugDetails(),
       });
+      if (!SERVER_TRANSCRIPTION_ENABLED) {
+        discardAudioRecording();
+        setError('Browser voice transcription is not available here. Tap the text box and use the iPhone keyboard mic.');
+        return;
+      }
       setError(null);
-      setVoiceTranscript('');
-      setVoiceInterim('Recording. Tap stop to transcribe.');
       voiceTranscriptRef.current = '';
       voiceInterimRef.current = '';
       voiceHadResultRef.current = false;
       speechFailedRef.current = true;
-      setVoiceElapsed(0);
-      setVoiceStartedAt(Date.now());
       setVoiceState('recording');
       return;
     }
@@ -556,14 +586,10 @@ export default function Home() {
     stopRequestedRef.current = false;
     recognitionRef.current = recognition;
     setError(null);
-    setVoiceTranscript('');
-    setVoiceInterim('');
     voiceTranscriptRef.current = '';
     voiceInterimRef.current = '';
     voiceHadResultRef.current = false;
     speechFailedRef.current = false;
-    setVoiceElapsed(0);
-    setVoiceStartedAt(Date.now());
     setVoiceState('recording');
     addDevLog({
       level: 'info',
@@ -587,14 +613,9 @@ export default function Home() {
         voiceHadResultRef.current = true;
       }
       if (finalText.trim()) {
-        setVoiceTranscript((current) => {
-          const next = `${current}${current ? ' ' : ''}${finalText.trim()}`;
-          voiceTranscriptRef.current = next;
-          return next;
-        });
+        voiceTranscriptRef.current = `${voiceTranscriptRef.current}${voiceTranscriptRef.current ? ' ' : ''}${finalText.trim()}`;
       }
       voiceInterimRef.current = interimText.trim();
-      setVoiceInterim(interimText.trim());
     };
 
     recognition.onerror = (event) => {
@@ -609,12 +630,11 @@ export default function Home() {
       speechFailedRef.current = true;
       if (!voiceTranscriptRef.current && !voiceInterimRef.current && mediaRecorderRef.current?.state === 'recording') {
         recognitionRef.current = null;
-        setVoiceInterim('Recording. Tap stop to transcribe.');
+        voiceInterimRef.current = '';
         return;
       }
       setVoiceState('idle');
-      setVoiceStartedAt(null);
-      setVoiceInterim('');
+      voiceInterimRef.current = '';
       if (voiceTranscriptRef.current || voiceInterimRef.current) {
         commitVoiceTranscript();
         return;
@@ -624,7 +644,6 @@ export default function Home() {
 
     recognition.onend = () => {
       recognitionRef.current = null;
-      setVoiceStartedAt(null);
       if (voiceTranscriptRef.current || voiceInterimRef.current) {
         commitVoiceTranscript();
         return;
@@ -640,8 +659,12 @@ export default function Home() {
       }
       if (!stopRequestedRef.current && !voiceHadResultRef.current && mediaRecorderRef.current?.state === 'recording') {
         speechFailedRef.current = true;
-        setVoiceInterim('Recording. Tap stop to transcribe.');
-        setVoiceStartedAt((current) => current ?? Date.now());
+        if (!SERVER_TRANSCRIPTION_ENABLED) {
+          discardAudioRecording();
+          setError('Browser voice transcription stopped without text. Try the iPhone keyboard mic.');
+          return;
+        }
+        voiceInterimRef.current = '';
         setVoiceState('recording');
       }
     };
@@ -657,17 +680,23 @@ export default function Home() {
         details: `${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}\n${voiceDebugDetails()}`,
       });
       if (mediaRecorderRef.current?.state === 'recording') {
-        setVoiceInterim('Recording. Tap stop to transcribe.');
+        if (!SERVER_TRANSCRIPTION_ENABLED) {
+          discardAudioRecording();
+          setVoiceState('idle');
+          setError('Voice transcription could not start. Try the iPhone keyboard mic.');
+          return;
+        }
+        voiceInterimRef.current = '';
         return;
       }
       setVoiceState('idle');
-      setVoiceStartedAt(null);
       setError('Voice transcription could not start. Try again, or use the iPhone keyboard mic.');
     }
   };
 
   const stopVoice = async () => {
     stopRequestedRef.current = true;
+    setVoiceState('transcribing');
     if (recognitionRef.current) {
       recognitionRef.current.onend = null;
       recognitionRef.current.onerror = null;
@@ -678,7 +707,6 @@ export default function Home() {
       }
       recognitionRef.current = null;
     }
-    setVoiceStartedAt(null);
     const speechTranscript = [voiceTranscriptRef.current, voiceInterimRef.current].filter(Boolean).join(' ').trim();
     const audioBlob = await stopAudioRecording();
     if (speechTranscript) {
@@ -691,12 +719,18 @@ export default function Home() {
       return;
     }
 
+    if (!SERVER_TRANSCRIPTION_ENABLED) {
+      clearVoiceState();
+      setError('Recorded-audio transcription is local-only. Use the iPhone keyboard mic on the deployed app.');
+      return;
+    }
+
     setVoiceState('transcribing');
-    setVoiceInterim('Transcribing...');
+    voiceInterimRef.current = '';
     try {
       const transcript = await transcribeAudio(audioBlob);
-      appendVoiceTranscript(transcript);
       clearVoiceState();
+      reviewVoiceTranscript(transcript);
     } catch (err) {
       addDevLog({
         level: 'error',
@@ -704,38 +738,162 @@ export default function Home() {
         message: 'Recorded-audio transcription failed.',
         details: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
       });
-      setError('Audio was recorded, but transcription failed. Check Developer Logs for the real error.');
+      setError("Audio was recorded, but I couldn't transcribe it. Check Developer Logs for details.");
       clearVoiceState();
     }
   };
 
-  const appendVoiceTranscript = (transcript: string) => {
-    setInput((current) => `${current.trim()}${current.trim() ? ', ' : ''}${transcript}`);
+  const reviewVoiceTranscript = (transcript: string) => {
+    const trimmed = transcript.trim();
+    if (!trimmed) return;
+    setInput((current) => mergeVoiceTranscript(current, trimmed));
+    setIsVoiceReview(true);
+  };
+
+  const mergeVoiceTranscript = (current: string, transcript: string) => {
+    const currentTrimmed = current.trim();
+    const transcriptTrimmed = transcript.trim();
+    return `${currentTrimmed}${currentTrimmed && transcriptTrimmed ? ', ' : ''}${transcriptTrimmed}`;
   };
 
   const commitVoiceTranscript = (): boolean => {
-    const transcript = [voiceTranscriptRef.current, voiceInterimRef.current].filter(Boolean).join(' ').trim();
+    const ignoredVoiceText = new Set(['Recording. Tap stop to transcribe.', 'Transcribing...']);
+    const transcript = [voiceTranscriptRef.current, voiceInterimRef.current]
+      .map((value) => value.trim())
+      .filter((value) => value && !ignoredVoiceText.has(value))
+      .join(' ')
+      .trim();
     if (!transcript) {
       setVoiceState('idle');
-      setVoiceInterim('');
+      voiceInterimRef.current = '';
       return false;
     }
-    appendVoiceTranscript(transcript);
+    reviewVoiceTranscript(transcript);
     discardAudioRecording();
     clearVoiceState();
     return true;
   };
 
   const clearVoiceState = () => {
-    setVoiceTranscript('');
-    setVoiceInterim('');
     voiceTranscriptRef.current = '';
     voiceInterimRef.current = '';
     voiceHadResultRef.current = false;
     speechFailedRef.current = false;
-    setVoiceStartedAt(null);
-    setVoiceElapsed(0);
+    setVoiceLevel(0);
     setVoiceState('idle');
+  };
+
+  const clearComposerInput = () => {
+    setInput('');
+    setIsVoiceReview(false);
+    setNote(null);
+    setFeedback(null);
+    setComposerState('idle');
+  };
+
+  const openMealSheet = () => {
+    if (composerState === 'logged') {
+      setComposerState('idle');
+      setFeedback(null);
+      setInput('');
+      setIsVoiceReview(false);
+    }
+    setSheetDragY(0);
+    setIsMealSheetOpen(true);
+  };
+
+  const closeMealSheet = ({ reset = false }: { reset?: boolean } = {}) => {
+    if (isBusy) return;
+    cancelVoice();
+    setSheetDragY(0);
+    setIsMealSheetOpen(false);
+    if (reset) {
+      setEditingEntryId(null);
+      setPendingRecipeName(null);
+      setRecipeText('');
+      clearComposerInput();
+    }
+  };
+
+  const startSheetDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (isBusy) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    sheetDragRef.current = { startY: event.clientY, lastY: event.clientY, lastT: performance.now(), velocity: 0 };
+  };
+
+  const moveSheetDrag = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = sheetDragRef.current;
+    if (!drag || isBusy) return;
+    const now = performance.now();
+    const dy = Math.max(0, event.clientY - drag.startY);
+    const elapsed = Math.max(now - drag.lastT, 1);
+    drag.velocity = ((event.clientY - drag.lastY) / elapsed) * 1000;
+    drag.lastY = event.clientY;
+    drag.lastT = now;
+    setSheetDragY(Math.min(180, dy));
+  };
+
+  const finishSheetDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    const drag = sheetDragRef.current;
+    sheetDragRef.current = null;
+    if (!drag || isBusy) return;
+    const dy = Math.max(0, event.clientY - drag.startY);
+    if (dy > 92 || drag.velocity > 720) {
+      closeMealSheet();
+      return;
+    }
+    setSheetDragY(0);
+  };
+
+  const startVoiceMeter = (stream: MediaStream) => {
+    stopVoiceMeter();
+    const AudioContextCtor = window.AudioContext ?? (window as any).webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    try {
+      const audioContext = new AudioContextCtor() as AudioContext;
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.72;
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      const samples = new Uint8Array(analyser.fftSize);
+      audioContextRef.current = audioContext;
+
+      const tick = () => {
+        analyser.getByteTimeDomainData(samples);
+        let sum = 0;
+        for (const sample of samples) {
+          const normalized = (sample - 128) / 128;
+          sum += normalized * normalized;
+        }
+        const rms = Math.sqrt(sum / samples.length);
+        const nextLevel = Math.min(1, Math.max(0, (rms - 0.018) * 9));
+        setVoiceLevel((current) => current * 0.72 + nextLevel * 0.28);
+        audioFrameRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (error) {
+      addDevLog({
+        level: 'warn',
+        source: 'Voice',
+        message: 'Could not start live microphone meter.',
+        details: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+    }
+  };
+
+  const stopVoiceMeter = () => {
+    if (audioFrameRef.current !== null) {
+      cancelAnimationFrame(audioFrameRef.current);
+      audioFrameRef.current = null;
+    }
+    audioContextRef.current?.close().catch(() => undefined);
+    audioContextRef.current = null;
+    setVoiceLevel(0);
   };
 
   const cancelVoice = () => {
@@ -762,8 +920,8 @@ export default function Home() {
       setRecipeText('');
       setComposerState('logged');
       if (parsed.lowConfidenceNote) setNote(parsed.lowConfidenceNote);
-    } catch (err: any) {
-      setError(err?.message ?? 'Something went wrong.');
+    } catch (err) {
+      showMealError('Saving a recurring meal failed.', err);
     } finally {
       setIsBusy(false);
     }
@@ -783,6 +941,7 @@ export default function Home() {
     setEditingEntryId(entry.id);
     setInput(entry.description);
     setActionsOpenId(null);
+    setIsMealSheetOpen(true);
   };
 
   const startMealSwipe = (entryId: string, event: PointerEvent<HTMLButtonElement>) => {
@@ -870,24 +1029,38 @@ export default function Home() {
     setSelectedEntryId(entryId);
     setActionsOpenId(null);
     if (shouldScroll) {
-      chartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      periodTabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
+  const composerUiState: ComposerUiState =
+    composerState === 'logged' && feedback
+      ? 'feedback'
+      : isBusy
+        ? 'sending'
+        : voiceState === 'transcribing'
+          ? 'transcribing'
+        : voiceState === 'recording'
+          ? 'recording'
+          : isVoiceReview
+            ? 'transcribed'
+            : input.trim()
+              ? 'typing'
+              : 'idle';
+  const composerExpanded = composerUiState === 'typing' || composerUiState === 'transcribed';
+
   return (
     <div className="log-paper-screen mx-auto max-w-md px-3 pb-24 pt-[72px]">
-      <h1 className="text-[26px] font-semibold leading-[0.96] tracking-normal text-neutral-950">Let's hit those macros</h1>
+      <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Let's hit those macros</h1>
 
-      <div className="mt-11 flex items-center justify-center gap-7">
+      <div className="period-tabs mt-8 scroll-mt-[52px]" ref={periodTabsRef}>
         {(['today', 'week', 'month'] as ViewMode[]).map((mode) => (
           <button
             key={mode}
-            className={`border-b pb-1 text-xs font-semibold leading-none transition ${
-              viewMode === mode ? 'border-neutral-950 text-neutral-950' : 'border-transparent text-neutral-400'
-            }`}
+            className={`period-tab ${viewMode === mode ? 'is-active' : ''}`}
             onClick={() => setViewMode(mode)}
           >
-            {mode === 'today' ? 'Today' : mode === 'week' ? 'Past Week' : 'Past Month'}
+            {mode === 'today' ? 'Today' : mode === 'week' ? 'Past week' : 'Past month'}
           </button>
         ))}
       </div>
@@ -898,7 +1071,7 @@ export default function Home() {
         <PeriodSummary days={monthSummaries} targets={targets} title="Past 30 days" />
       ) : (
         <>
-      <div className="mt-4 scroll-mt-4" ref={chartRef}>
+      <div className="mt-6 scroll-mt-4" ref={chartRef}>
         <MacroSummary
           totals={chartTotals}
           targets={targets}
@@ -907,140 +1080,17 @@ export default function Home() {
         />
       </div>
 
-      {pendingRecipeName ? (
-        <div className="mt-6">
-          <p className="text-sm font-semibold text-neutral-900">What's in "{pendingRecipeName}"?</p>
-          <p className="mt-1 text-xs text-neutral-500">
-            I'll remember this so next time you just say the name.
-          </p>
-          <textarea
-            className="mt-3 w-full resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-            rows={3}
-            placeholder="1.5 scoop whey, 2 tbsp yogurt, ½ cup berries..."
-            value={recipeText}
-            onChange={(e) => setRecipeText(e.target.value)}
-          />
-          <div className="mt-3 flex gap-2">
-            <button
-              className="flex-1 rounded-2xl bg-neutral-100 py-3 text-sm font-semibold text-neutral-700"
-              onClick={() => {
-                setPendingRecipeName(null);
-                setRecipeText('');
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              className="flex-1 rounded-2xl bg-green-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
-              onClick={submitRecipe}
-              disabled={isBusy || !recipeText.trim()}
-            >
-              {isBusy ? 'Saving...' : 'Save & Log'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-5">
-          <div>
-            {editingEntryId && (
-              <div className="mb-3 flex items-center justify-between rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                <span>Editing logged item</span>
-                <button
-                  className="rounded-full px-2 py-1 text-amber-900"
-                  onClick={() => {
-                    setEditingEntryId(null);
-                    setInput('');
-                    setFeedback(null);
-                    setComposerState('idle');
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-            <div className={`meal-flip-slot ${composerState === 'logged' && feedback ? 'is-logged' : ''}`}>
-              <textarea
-                className="meal-flip-face meal-flip-front resize-none rounded-[1.5rem] border border-neutral-200 bg-white px-4 py-4 pb-16 text-base leading-6 text-neutral-950 outline-none focus:border-neutral-300 disabled:text-neutral-400"
-                placeholder="2 eggs, half an avocado, one roti, handful of spinach"
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  setNote(null);
-                  setFeedback(null);
-                  setComposerState('idle');
-                  if (voiceState !== 'idle') cancelVoice();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitText(input);
-                }}
-                disabled={isBusy || composerState === 'logged' || voiceState !== 'idle'}
-              />
-              <button
-                className="meal-flip-mic"
-                type="button"
-                aria-label="Start voice transcription"
-                onClick={startVoice}
-                disabled={isBusy || composerState === 'logged' || voiceState !== 'idle'}
-              >
-                <MicIcon />
-              </button>
-              <button
-                className="meal-flip-action"
-                onClick={() => {
-                  if (composerState === 'logged') {
-                    setComposerState('idle');
-                    setFeedback(null);
-                    setInput('');
-                    return;
-                  }
-                  submitText(input);
-                }}
-                disabled={isBusy || voiceState !== 'idle' || (!input.trim() && composerState !== 'logged')}
-              >
-                <span>{composerState === 'logged' ? 'Meal Logged!' : isBusy ? 'Logging...' : editingEntryId ? 'Save' : 'Log meal'}</span>
-                {composerState !== 'logged' && !isBusy && <ArrowUpIcon />}
-              </button>
-              {voiceState !== 'idle' && (
-                <div className="voice-recorder meal-flip-face rounded-[1.5rem] border border-neutral-200 bg-white px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="line-clamp-3 text-sm leading-[1.4] text-neutral-950">
-                      {voiceState === 'transcribing'
-                        ? 'Transcribing...'
-                        : [voiceTranscript, voiceInterim].filter(Boolean).join(' ') || 'Say what you ate...'}
-                    </div>
-                  </div>
-                  <div className="voice-controls">
-                    <VoiceWaveform isRecording />
-                    <span className="voice-timer">{formatVoiceTime(voiceElapsed)}</span>
-                    <button
-                      className="voice-stop-button"
-                      type="button"
-                      aria-label="Stop voice transcription"
-                      onClick={stopVoice}
-                      disabled={voiceState === 'transcribing'}
-                    >
-                      <span />
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div className="meal-flip-face meal-flip-back flex items-center justify-center rounded-[1.5rem] border border-dashed border-neutral-300 bg-neutral-50 px-5 py-4 pb-16 text-center text-sm font-medium leading-[1.44] text-neutral-950">
-                {feedback?.text ?? 'Meal logged.'}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      {note && <p className="mt-3 text-sm text-amber-600">{note}</p>}
-
       <div className="mt-7">
-        <h2 className="px-1 text-sm font-semibold uppercase leading-[1.2] text-neutral-950">Today's meals</h2>
+        <div className="today-meals-header">
+          <h2 className="text-sm font-semibold uppercase leading-[1.2] text-neutral-950">Today's meals</h2>
+          <button className="meal-log-cta" type="button" onClick={openMealSheet}>
+            Log meal
+          </button>
+        </div>
         {entries.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-400">Nothing logged yet.</p>
         ) : (
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-2">
             {entries.map((e) => {
               const badge = mealBadge(e);
               const rowOffset = mealRowOffset(e.id);
@@ -1048,11 +1098,9 @@ export default function Home() {
               return (
               <li
                 key={e.id}
-                className={`rounded bg-white p-2 shadow-[0_2px_5px_rgba(0,0,0,0.05)] ${
-                  selectedEntryId === e.id ? 'ring-2 ring-green-500' : ''
-                }`}
+                className={`meal-list-item px-2 py-4 ${selectedEntryId === e.id ? 'is-selected' : ''}`}
               >
-                <div className="relative overflow-hidden rounded">
+                <div className="relative overflow-hidden">
                   <div className="absolute inset-y-0 right-2 flex items-center gap-3">
                     <button
                       className="grid h-10 w-10 place-items-center text-neutral-950"
@@ -1076,7 +1124,7 @@ export default function Home() {
                     </button>
                   </div>
                   <button
-                    className="relative flex w-full touch-pan-y flex-col items-start gap-2 rounded bg-white text-left will-change-transform"
+                    className="relative flex w-full touch-pan-y flex-col items-start gap-1 bg-white text-left will-change-transform"
                     style={{
                       transform: `translate3d(${rowOffset}px, 0, 0)`,
                       transition: isDragging ? 'none' : 'transform 380ms cubic-bezier(0.32, 0.72, 0, 1)',
@@ -1091,14 +1139,14 @@ export default function Home() {
                     }}
                   >
                     <div className="flex w-full items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-[1.2] tracking-[0.015em] text-neutral-950">
+                      <div className="min-w-0 flex-1 truncate text-[15px] font-medium leading-[1.25] text-neutral-950">
                         {e.description}
                       </div>
-                      <span className={`shrink-0 rounded px-2 py-1 font-mono text-[11px] leading-none ${badge.className}`}>
+                      <span className={`shrink-0 rounded-xl px-2.5 py-1 text-[13px] font-semibold leading-none ${badge.className}`}>
                         {badge.label}
                       </span>
                     </div>
-                    <div className="w-full text-xs leading-[1.333] tracking-[0.015em] text-[#737373]">
+                    <div className="w-full text-[12px] leading-[1.4] text-[#737373]">
                       {Math.round(e.calories)} kcal · {Math.round(e.protein)}g protein · {Math.round(e.carbs)}g carbs · {Math.round(e.fat)}g fat
                     </div>
                   </button>
@@ -1110,6 +1158,182 @@ export default function Home() {
         )}
       </div>
         </>
+      )}
+      {isMealSheetOpen && (
+        <div className="meal-sheet-layer" role="presentation">
+          <button
+            className="meal-sheet-scrim"
+            type="button"
+            aria-label="Dismiss meal logger"
+            onClick={() => closeMealSheet()}
+            disabled={isBusy}
+          />
+          <section
+            className="meal-bottom-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Log meal"
+            style={{ '--sheet-drag-y': `${sheetDragY}px` } as CSSProperties}
+          >
+            <div
+              className="meal-sheet-handle-zone"
+              onPointerDown={startSheetDrag}
+              onPointerMove={moveSheetDrag}
+              onPointerUp={finishSheetDrag}
+              onPointerCancel={finishSheetDrag}
+            >
+              <div className="meal-sheet-handle" />
+            </div>
+            <div className="meal-sheet-content">
+              {pendingRecipeName ? (
+                <div className="meal-sheet-recipe">
+                  <p className="text-sm font-semibold text-neutral-900">What's in "{pendingRecipeName}"?</p>
+                  <p className="mt-1 text-xs text-neutral-500">I'll remember this so next time you just say the name.</p>
+                  <textarea
+                    className="mt-3 w-full resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-neutral-400"
+                    rows={3}
+                    placeholder="1.5 scoop whey, 2 tbsp yogurt, ½ cup berries..."
+                    value={recipeText}
+                    onChange={(e) => setRecipeText(e.target.value)}
+                  />
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      className="flex-1 rounded-2xl bg-neutral-100 py-3 text-sm font-semibold text-neutral-700"
+                      onClick={() => {
+                        setPendingRecipeName(null);
+                        setRecipeText('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="flex-1 rounded-2xl bg-neutral-950 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                      onClick={submitRecipe}
+                      disabled={isBusy || !recipeText.trim()}
+                    >
+                      {isBusy ? 'Saving...' : 'Save & Log'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {editingEntryId && (
+                    <div className="mb-3 flex items-center justify-between rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                      <span>Editing logged item</span>
+                      <button
+                        className="rounded-full px-2 py-1 text-amber-900"
+                        onClick={() => {
+                          setEditingEntryId(null);
+                          clearComposerInput();
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  <div
+                    className={`nutri-composer ${
+                      composerExpanded || isComposerMultiline ? 'is-expanded' : ''
+                    } ${composerUiState === 'recording' ? 'is-recording' : ''} ${composerUiState === 'sending' ? 'is-sending' : ''} ${
+                      composerUiState === 'feedback' ? 'is-feedback' : ''
+                    }`}
+                  >
+                    {composerUiState === 'recording' && (
+                      <div className="nutri-recording-row">
+                        <VoiceWaveform level={voiceLevel} />
+                        <button className="nutri-circle-button is-stop" type="button" aria-label="Stop recording" onClick={() => stopVoice()}>
+                          <span className="voice-stop-glyph" />
+                        </button>
+                      </div>
+                    )}
+                    {composerUiState === 'transcribing' && (
+                      <div className="nutri-sending-row">
+                        <span>Transcribing...</span>
+                        <span className="nutri-progress-dot" aria-hidden="true" />
+                      </div>
+                    )}
+                    {composerUiState === 'sending' && (
+                      <div className="nutri-sending-row">
+                        <span>Calculating macros...</span>
+                        <button className="nutri-circle-button" type="button" aria-label="Calculating macros" disabled>
+                          <ArrowUpIcon />
+                        </button>
+                      </div>
+                    )}
+                    {composerUiState === 'feedback' && feedback && (
+                      <div className="nutri-feedback-row">
+                        <span>{feedback.text}</span>
+                        <button type="button" aria-label="Done" onClick={() => closeMealSheet({ reset: true })}>
+                          Done
+                        </button>
+                      </div>
+                    )}
+                    {(composerUiState === 'idle' || composerUiState === 'typing' || composerUiState === 'transcribed') && (
+                      <>
+                        <div className="nutri-input-row">
+                          <textarea
+                            ref={composerInputRef}
+                            className="nutri-input"
+                            rows={1}
+                            placeholder="What did you have for breakfast?"
+                            value={input}
+                            onChange={(e) => {
+                              setInput(e.target.value);
+                              setNote(null);
+                              setFeedback(null);
+                              setIsVoiceReview(false);
+                              setComposerState('idle');
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                setIsVoiceReview(false);
+                                submitText(input);
+                              }
+                            }}
+                            disabled={composerState === 'logged'}
+                          />
+                          {composerUiState === 'idle' && (
+                            <button className="nutri-inline-mic" type="button" aria-label="Record meal" onClick={startVoice}>
+                              <MicIcon />
+                            </button>
+                          )}
+                        </div>
+                        {(composerUiState === 'typing' || composerUiState === 'transcribed') && (
+                          <div className="nutri-control-row">
+                            {composerUiState === 'transcribed' ? (
+                              <button className="nutri-circle-button" type="button" aria-label="Discard transcript" onClick={clearComposerInput}>
+                                <CloseIcon />
+                              </button>
+                            ) : (
+                              <button className="nutri-circle-button is-ghost" type="button" aria-label="Record instead" onClick={startVoice}>
+                                <MicIcon />
+                              </button>
+                            )}
+                            <button
+                              className="nutri-circle-button is-primary"
+                              type="button"
+                              aria-label={editingEntryId ? 'Save meal' : 'Log meal'}
+                              onClick={() => {
+                                setIsVoiceReview(false);
+                                submitText(input);
+                              }}
+                              disabled={!input.trim()}
+                            >
+                              <ArrowUpIcon />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+                  {note && <p className="mt-3 text-sm text-amber-600">{note}</p>}
+                </>
+              )}
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );
@@ -1204,19 +1428,24 @@ function TrashIcon() {
   );
 }
 
-function formatVoiceTime(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+function CloseIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 128 128" fill="currentColor" aria-hidden="true">
+      <path d="M102.83 97.17a4 4 0 0 1-5.66 5.66L64 69.655 30.83 102.83a4 4 0 0 1-5.66-5.66L58.345 64 25.17 30.83A4 4 0 0 1 30.83 25.17L64 58.345l33.17-33.175a4 4 0 0 1 5.66 5.66L69.655 64Z" />
+    </svg>
+  );
 }
 
-function VoiceWaveform({ isRecording }: { isRecording: boolean }) {
+function VoiceWaveform({ level }: { level: number }) {
   const bars = [5, 10, 16, 22, 12, 28, 18, 9, 24, 14, 20, 7, 17, 11, 25, 13];
+  const activeLevel = level > 0.08 ? level : 0;
   return (
-    <div className={`voice-waveform ${isRecording ? 'is-recording' : ''}`} aria-hidden="true">
-      {bars.map((height, index) => (
-        <span key={`${height}-${index}`} style={{ height: `${height}px`, animationDelay: `${index * 42}ms` }} />
-      ))}
+    <div className={`voice-waveform ${activeLevel > 0 ? 'is-speaking' : ''}`} aria-hidden="true">
+      {bars.map((height, index) => {
+        const wave = 0.55 + Math.abs(Math.sin(index * 1.7)) * 0.55;
+        const liveHeight = Math.max(2, height * activeLevel * wave);
+        return <span key={`${height}-${index}`} style={{ height: `${liveHeight}px` }} />;
+      })}
     </div>
   );
 }

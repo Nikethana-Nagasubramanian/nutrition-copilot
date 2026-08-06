@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function useRecorder(onStop: (blob: Blob) => void) {
+export function useRecorder(onStop: (blob: Blob) => void, onError?: (error: unknown) => void) {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -34,15 +34,29 @@ export function useRecorder(onStop: (blob: Blob) => void) {
       recorder.start();
       setIsRecording(true);
     } catch (err) {
-      console.error('Could not start recording', err);
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      setIsRecording(false);
+      onError?.(err);
     }
-  }, [onStop]);
+  }, [onError, onStop]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.onstop = null;
+        mediaRecorderRef.current.stop();
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    };
   }, []);
 
   return { isRecording, startRecording, stopRecording };

@@ -18,10 +18,10 @@ export function AskResultCard({ result, targets }: { result: AskNutritionResult;
   const displayTotals = showNewCalories ? result.newTotals : beforeTotals;
 
   return (
-    <div className="mt-4 space-y-[14px] rounded-lg border border-[#dddddd] bg-white py-3">
+    <div className="mt-7 space-y-[14px] border-y border-neutral-200 bg-white py-4">
       <div className="flex items-start justify-between gap-3 border-b border-neutral-100 px-3 pb-3">
         <div>
-          <div className={`inline-flex rounded px-2 py-1 text-[10px] font-bold uppercase leading-[1.5] tracking-[0.08em] ${verdictStyles}`}>
+          <div className={`inline-flex rounded-xl px-2.5 py-1 text-xs font-semibold leading-[1.5] ${verdictStyles}`}>
             {verdictCopy}
           </div>
           <h3 className="mt-2 text-xl font-semibold leading-[1.25] text-neutral-950">{result.foodName}</h3>
@@ -65,11 +65,12 @@ export function AskResultCard({ result, targets }: { result: AskNutritionResult;
 }
 
 function MacroMini({ label, macros }: { label: string; macros: Macros }) {
+  const hasNegative = macros.calories < 0 || macros.protein < 0 || macros.carbs < 0 || macros.fat < 0;
   return (
-    <div className="rounded-md bg-neutral-50 p-2">
-      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400">{label}</div>
-      <div className="mt-1 text-sm font-semibold leading-none text-neutral-950">{Math.round(macros.calories)} kcal</div>
-      <div className="mt-1 text-[11px] leading-4 text-neutral-500">
+    <div className={`rounded-md p-2 ${hasNegative ? 'bg-red-50 ring-1 ring-red-200' : 'bg-neutral-50'}`}>
+      <div className={`text-[10px] font-bold uppercase ${hasNegative ? 'text-red-500' : 'text-neutral-400'}`}>{label}</div>
+      <div className={`mt-1 text-sm font-semibold leading-none ${hasNegative ? 'text-red-600' : 'text-neutral-950'}`}>{Math.round(macros.calories)} kcal</div>
+      <div className={`mt-1 text-[11px] leading-4 ${hasNegative ? 'text-red-500' : 'text-neutral-500'}`}>
         {Math.round(macros.protein)}p · {Math.round(macros.carbs)}c · {Math.round(macros.fat)}f
       </div>
     </div>
@@ -91,11 +92,12 @@ function AskRange({
   unit: string;
   color: string;
 }) {
-  const visualMax = Math.max(max * 1.22, value * 1.08, 1);
+  const isOver = value > max;
+  const visualMax = Math.max(isOver ? max : max * 1.22, 1);
   const baseValue = Math.min(previous, value);
   const deltaValue = Math.max(0, value - previous);
   const basePosition = Math.min(100, Math.max(0, (baseValue / visualMax) * 100));
-  const deltaPosition = Math.min(100, Math.max(0, (deltaValue / visualMax) * 100));
+  const deltaPosition = isOver ? 100 - basePosition : Math.min(100, Math.max(0, (deltaValue / visualMax) * 100));
   return (
     <div className="flex h-8 items-center gap-1.5">
       <div className="relative h-8 min-w-0 flex-1 overflow-hidden rounded-lg bg-black/[0.04]">
@@ -112,7 +114,7 @@ function AskRange({
             style={{
               left: '-5px',
               width: `calc(${basePosition}% + 5px)`,
-              backgroundColor: `${color}4D`,
+              backgroundColor: `${color}${isOver ? '99' : '4D'}`,
               transitionTimingFunction: 'cubic-bezier(0.32, 0.72, 0, 1)',
             }}
           />
@@ -127,11 +129,11 @@ function AskRange({
             }}
           />
         </div>
-        <div className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase leading-none tracking-[0.06em] text-black">
+        <div className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-[10px] uppercase leading-none text-black">
           {label}
         </div>
       </div>
-      <div className="flex h-8 w-10 shrink-0 items-center rounded-lg px-1.5 font-mono text-[10px] leading-none text-black/95">
+      <div className={`flex h-8 w-10 shrink-0 items-center rounded-lg px-1.5 font-mono text-[10px] leading-none ${isOver ? 'text-red-600' : 'text-black/95'}`}>
         <AnimatedNumber value={Math.round(value)} />
       </div>
       <span className="sr-only">{unit}</span>

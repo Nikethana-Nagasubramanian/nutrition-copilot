@@ -4,8 +4,9 @@
     {
       "name": "vite-dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--host", "--port", "5173"],
-      "port": 5173
+      "runtimeArgs": ["vite", "--host"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

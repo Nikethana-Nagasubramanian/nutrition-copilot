@@ -125,7 +125,7 @@ export default function Meals() {
     <div className="mx-auto max-w-md px-4 pb-28 pt-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[2rem] font-bold leading-tight tracking-normal text-neutral-950">Meals</h1>
+          <h1 className="text-[2rem] font-bold leading-tight text-neutral-950">Meals</h1>
           <p className="mt-1 text-sm text-neutral-500">Save repeat meals and log them without AI.</p>
         </div>
         <button

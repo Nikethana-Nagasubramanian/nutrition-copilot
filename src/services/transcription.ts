@@ -1,6 +1,17 @@
 import { addDevLog } from './devLogs';
 
+const SERVER_TRANSCRIPTION_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_SERVER_TRANSCRIPTION === 'true';
+
 export async function transcribeAudio(audioBlob: Blob): Promise<string> {
+  if (!SERVER_TRANSCRIPTION_ENABLED) {
+    addDevLog({
+      level: 'info',
+      source: 'Voice',
+      message: 'Recorded-audio transcription is disabled for this deployed build.',
+    });
+    throw new Error('Server transcription is local-only. Use the iPhone keyboard mic for deployed builds.');
+  }
+
   const file = new File([audioBlob], `meal-audio.${audioExtension(audioBlob.type)}`, {
     type: audioBlob.type || 'audio/webm',
   });
