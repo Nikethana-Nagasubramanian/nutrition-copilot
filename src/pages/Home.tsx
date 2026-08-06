@@ -91,6 +91,14 @@ declare global {
   }
 }
 
+function mealComposerPlaceholder(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'What did you have for breakfast?';
+  if (hour < 17) return 'What did you have for lunch?';
+  if (hour < 21) return 'What did you have for a snack?';
+  return 'Did you have your dinner?';
+}
+
 function looksLikeMealName(text: string): boolean {
   const words = text.trim().split(/\s+/);
   return words.length <= 4 && !/\d/.test(text);
@@ -1275,7 +1283,7 @@ export default function Home() {
                             ref={composerInputRef}
                             className="nutri-input"
                             rows={1}
-                            placeholder="What did you have for breakfast?"
+                            placeholder={mealComposerPlaceholder()}
                             value={input}
                             onChange={(e) => {
                               setInput(e.target.value);
@@ -1327,6 +1335,11 @@ export default function Home() {
                       </>
                     )}
                   </div>
+                  {composerUiState === 'idle' && (
+                    <div className="nutri-composer-helper">
+                      You don't have to give accurate values. Nutri will calculate the estimate.
+                    </div>
+                  )}
                   {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
                   {note && <p className="mt-3 text-sm text-amber-600">{note}</p>}
                 </>

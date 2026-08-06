@@ -333,9 +333,16 @@ select {
   caret-color: #15803d;
   outline: none;
   padding: 8px 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 400;
   line-height: 1.5;
+}
+
+.nutri-composer-helper {
+  padding: 8px 4px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #a1a1aa;
 }
 
 .nutri-input::placeholder {

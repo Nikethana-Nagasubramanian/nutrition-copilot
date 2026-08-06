@@ -114,35 +114,61 @@ export default function Ask() {
         Ask Nutri how a meal fits into your meal plan today.
       </p>
 
-      <div className="ask-composer mt-7">
-        <textarea
-          className="ask-composer-input"
-          placeholder="Can I have pizza tonight?"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) handleAsk();
-          }}
-          disabled={isAsking || isTranscribing}
-        />
-        <button
-          className={`ask-composer-mic ${isRecording ? 'is-recording' : ''}`}
-          type="button"
-          aria-label={isRecording ? 'Stop recording' : 'Voice input'}
-          onClick={isRecording ? stopRecording : startRecording}
-          disabled={isAsking || isTranscribing}
-        >
-          {isRecording ? <span className="voice-stop-glyph" /> : <MicIcon />}
-        </button>
-        <button
-          className="ask-composer-action"
-          onClick={handleAsk}
-          disabled={isAsking || isRecording || isTranscribing || !question.trim()}
-        >
-          <span>{isTranscribing ? 'Transcribing...' : isAsking ? 'Checking...' : 'Ask'}</span>
-          {!isAsking && !isTranscribing && <ArrowUpIcon />}
-        </button>
+      <div className={`nutri-composer mt-7 ${isRecording ? 'is-recording' : ''}`}>
+        {isRecording ? (
+          <div className="nutri-recording-row">
+            <VoiceWaveform />
+            <button className="nutri-circle-button is-stop" type="button" aria-label="Stop recording" onClick={stopRecording}>
+              <span className="voice-stop-glyph" />
+            </button>
+          </div>
+        ) : isTranscribing ? (
+          <div className="nutri-sending-row">
+            <span>Transcribing...</span>
+            <span className="nutri-progress-dot" aria-hidden="true" />
+          </div>
+        ) : (
+          <>
+            <div className="nutri-input-row">
+              <textarea
+                className="nutri-input"
+                rows={1}
+                placeholder="Can I have pizza tonight?"
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) handleAsk();
+                }}
+                disabled={isAsking}
+              />
+              {!question.trim() && (
+                <button className="nutri-inline-mic" type="button" aria-label="Voice input" onClick={startRecording} disabled={isAsking}>
+                  <MicIcon />
+                </button>
+              )}
+            </div>
+            {question.trim() && (
+              <div className="nutri-control-row">
+                <button className="nutri-circle-button is-ghost" type="button" aria-label="Record instead" onClick={startRecording} disabled={isAsking}>
+                  <MicIcon />
+                </button>
+                <button
+                  className="nutri-circle-button is-primary"
+                  type="button"
+                  aria-label="Ask"
+                  onClick={handleAsk}
+                  disabled={isAsking || !question.trim()}
+                >
+                  <ArrowUpIcon />
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
+      {!isRecording && !isTranscribing && !question.trim() && (
+        <div className="nutri-composer-helper">You don't have to phrase it perfectly. Nutri will figure out the rest.</div>
+      )}
 
       <div className="mt-6">
         <MacroSummary totals={totals} targets={targets} />
@@ -156,6 +182,17 @@ export default function Ask() {
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {answer && <AskResultCard result={answer} targets={targets} />}
+    </div>
+  );
+}
+
+function VoiceWaveform() {
+  const bars = [5, 10, 16, 22, 12, 28, 18, 9, 24, 14, 20, 7, 17, 11, 25, 13];
+  return (
+    <div className="voice-waveform is-speaking" aria-hidden="true">
+      {bars.map((height, index) => (
+        <span key={`${height}-${index}`} style={{ height: `${height}px` }} />
+      ))}
     </div>
   );
 }
