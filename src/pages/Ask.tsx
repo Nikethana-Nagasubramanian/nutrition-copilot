@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AskResultCard } from '../components/AskResultCard';
 import { MacroSummary } from '../components/MacroSummary';
 import { getEntriesForDate, todayKey } from '../db/logEntries';
@@ -41,6 +41,8 @@ export default function Ask() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [whoopSummary, setWhoopSummary] = useState<WhoopSummary | null>(null);
+  const [isQuestionMultiline, setIsQuestionMultiline] = useState(false);
+  const questionInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const handleRecordingStop = useCallback(async (blob: Blob) => {
     setIsTranscribing(true);
@@ -84,6 +86,18 @@ export default function Ask() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const inputEl = questionInputRef.current;
+    if (!inputEl || isRecording) {
+      setIsQuestionMultiline(false);
+      return;
+    }
+    inputEl.style.height = '32px';
+    const isWrapped = inputEl.scrollHeight > 36;
+    setIsQuestionMultiline(isWrapped);
+    inputEl.style.height = isWrapped ? `${Math.min(inputEl.scrollHeight, 96)}px` : '32px';
+  }, [question, isRecording]);
+
   const handleAsk = async () => {
     const trimmed = question.trim();
     if (!trimmed) return;
@@ -115,7 +129,17 @@ export default function Ask() {
         Ask Nutri how a meal fits into your meal plan today.
       </p>
 
-      <div className={`nutri-composer mt-7 ${isRecording ? 'is-recording' : ''}`}>
+      <div className="mt-6">
+        <MacroSummary totals={totals} targets={targets} />
+      </div>
+
+      {whoopSummary && whoopDailyInsight(whoopSummary) && (
+        <p className="mt-3 rounded-lg bg-neutral-50 px-3 py-2 text-xs font-medium leading-5 text-neutral-600">
+          {whoopDailyInsight(whoopSummary)}
+        </p>
+      )}
+
+      <div className={`nutri-composer mt-6 ${isQuestionMultiline ? 'is-expanded' : ''} ${isRecording ? 'is-recording' : ''}`}>
         {isRecording ? (
           <div className="nutri-recording-row">
             <VoiceWaveform level={level} />
@@ -132,6 +156,7 @@ export default function Ask() {
           <>
             <div className="nutri-input-row">
               <textarea
+                ref={questionInputRef}
                 className="nutri-input"
                 rows={1}
                 placeholder="Can I have pizza tonight?"
@@ -169,16 +194,6 @@ export default function Ask() {
       </div>
       {!isRecording && !isTranscribing && !question.trim() && (
         <div className="nutri-composer-helper">You don't have to phrase it perfectly. Nutri will figure out the rest.</div>
-      )}
-
-      <div className="mt-6">
-        <MacroSummary totals={totals} targets={targets} />
-      </div>
-
-      {whoopSummary && whoopDailyInsight(whoopSummary) && (
-        <p className="mt-3 rounded-lg bg-neutral-50 px-3 py-2 text-xs font-medium leading-5 text-neutral-600">
-          {whoopDailyInsight(whoopSummary)}
-        </p>
       )}
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
