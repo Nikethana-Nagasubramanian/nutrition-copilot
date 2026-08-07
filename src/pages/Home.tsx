@@ -7,7 +7,7 @@ import { getDailyTargets, getWhoopConfig } from '../db/settings';
 import { addDevLog } from '../services/devLogs';
 import { parseMealDescription } from '../services/openai';
 import { transcribeAudio } from '../services/transcription';
-import { whoopDailyInsight, whoopMealNudge } from '../services/whoop';
+import { whoopDailyInsight, whoopInsightClassName, whoopMealNudge } from '../services/whoop';
 import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import type { DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
@@ -952,12 +952,15 @@ export default function Home() {
               ? 'typing'
               : 'idle';
   const composerExpanded = composerUiState === 'typing' || composerUiState === 'transcribed';
+  const whoopInsight = whoopSummary ? whoopDailyInsight(whoopSummary) : null;
 
   return (
     <div className={`log-paper-screen ${PAGE_CONTAINER_CLASS}`}>
       <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Let's hit those macros</h1>
-      {viewMode === 'today' && whoopSummary && whoopDailyInsight(whoopSummary) && (
-        <p className="mt-2 text-sm leading-5 text-neutral-500">{whoopDailyInsight(whoopSummary)}</p>
+      {viewMode === 'today' && whoopInsight && (
+        <p className={`mt-2 inline-block rounded-lg px-2.5 py-1 text-sm font-medium leading-5 ${whoopInsightClassName(whoopInsight.tone)}`}>
+          {whoopInsight.text}
+        </p>
       )}
 
       <div className="period-tabs mt-8 scroll-mt-[52px]" ref={periodTabsRef}>

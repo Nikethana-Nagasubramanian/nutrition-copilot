@@ -111,12 +111,8 @@ export default function Settings() {
         return;
       }
       setWhoop(nextConfig);
-      if (nextConfig.accessToken) {
-        handleSyncWhoop(nextConfig);
-      }
     });
     setLogs(getDevLogs());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSaveOllama = async () => {
@@ -231,18 +227,24 @@ export default function Settings() {
         <h2 className="text-sm font-semibold text-neutral-900">WHOOP</h2>
         {whoop.accessToken ? (
           <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-white p-3">
-            <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
-                <CheckIcon /> Connected
-              </span>
-              {whoopSyncing && <span className="text-xs text-neutral-400">Syncing…</span>}
-            </div>
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
+              <CheckIcon /> Connected
+            </span>
             <p className="text-xs leading-5 text-neutral-500">Recovery · Sleep · Strain</p>
             {whoop.lastSummary && <WhoopSummaryCard whoop={whoop} />}
             {whoopMessage && <p className="text-xs font-medium leading-5 text-amber-700">{whoopMessage}</p>}
-            <button className="btn-base btn-outline w-full" onClick={handleDisconnectWhoop}>
-              Disconnect
-            </button>
+            <div className="flex gap-2">
+              <button
+                className="btn-base btn-secondary flex-1"
+                onClick={() => handleSyncWhoop()}
+                disabled={whoopSyncing}
+              >
+                {whoopSyncing ? 'Syncing…' : 'Sync now'}
+              </button>
+              <button className="btn-base btn-outline flex-1" onClick={handleDisconnectWhoop} disabled={whoopSyncing}>
+                Disconnect
+              </button>
+            </div>
           </div>
         ) : (
           <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-white p-3">

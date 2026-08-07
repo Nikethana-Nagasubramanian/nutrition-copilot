@@ -131,20 +131,31 @@ export function whoopNutritionContext(summary: WhoopSummary | null | undefined):
   return parts.length ? parts.join(', ') : null;
 }
 
-export function whoopDailyInsight(summary: WhoopSummary | null | undefined): string | null {
+export type WhoopInsightTone = 'red' | 'yellow' | 'green';
+export type WhoopInsight = { text: string; tone: WhoopInsightTone };
+
+export function whoopInsightClassName(tone: WhoopInsightTone): string {
+  if (tone === 'red') return 'bg-red-50 text-red-700';
+  if (tone === 'yellow') return 'bg-amber-50 text-amber-700';
+  return 'bg-emerald-50 text-emerald-700';
+}
+
+export function whoopDailyInsight(summary: WhoopSummary | null | undefined): WhoopInsight | null {
   if (!summary) return null;
   const strain = summary.cycle?.strain ?? null;
   const recovery = summary.recovery?.score ?? null;
   const sleep = summary.sleep?.performancePercentage ?? null;
 
   if (recovery != null && recovery < 45) {
-    return `Low recovery today · ${Math.round(recovery)}%. Keep meals balanced and prioritize protein.`;
+    // Matches WHOOP's own recovery banding: red 0-33%, yellow 34-66%, green 67-100%.
+    const tone: WhoopInsightTone = recovery < 34 ? 'red' : 'yellow';
+    return { text: `Low recovery today · ${Math.round(recovery)}%. Keep meals balanced and prioritize protein.`, tone };
   }
   if (strain != null && strain >= 14) {
-    return `High strain today · ${strain.toFixed(1)}. You've used more energy than usual — there's room for more carbs.`;
+    return { text: `High strain today · ${strain.toFixed(1)}. You've used more energy than usual — there's room for more carbs.`, tone: 'yellow' };
   }
   if (sleep != null && sleep < 70) {
-    return `Lighter sleep last night · ${Math.round(sleep)}%. Keep meals steady and protein-forward today.`;
+    return { text: `Lighter sleep last night · ${Math.round(sleep)}%. Keep meals steady and protein-forward today.`, tone: 'yellow' };
   }
   return null;
 }

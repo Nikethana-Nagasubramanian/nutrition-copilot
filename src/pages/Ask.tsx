@@ -8,7 +8,7 @@ import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import { addDevLog } from '../services/devLogs';
 import { askNutritionQuestion } from '../services/openai';
 import { transcribeAudio } from '../services/transcription';
-import { whoopDailyInsight, whoopNutritionContext } from '../services/whoop';
+import { whoopDailyInsight, whoopInsightClassName, whoopNutritionContext } from '../services/whoop';
 import type { AskNutritionResult, DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
 const ZERO_MACROS: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
@@ -122,6 +122,8 @@ export default function Ask() {
     }
   };
 
+  const whoopInsight = whoopSummary ? whoopDailyInsight(whoopSummary) : null;
+
   return (
     <div className={`log-paper-screen ${PAGE_CONTAINER_CLASS}`}>
       <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Ask Nutri</h1>
@@ -133,9 +135,9 @@ export default function Ask() {
         <MacroSummary totals={totals} targets={targets} />
       </div>
 
-      {whoopSummary && whoopDailyInsight(whoopSummary) && (
-        <p className="mt-3 rounded-lg bg-neutral-50 px-3 py-2 text-xs font-medium leading-5 text-neutral-600">
-          {whoopDailyInsight(whoopSummary)}
+      {whoopInsight && (
+        <p className={`mt-3 rounded-lg px-3 py-2 text-xs font-medium leading-5 ${whoopInsightClassName(whoopInsight.tone)}`}>
+          {whoopInsight.text}
         </p>
       )}
 
