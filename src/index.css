@@ -180,7 +180,7 @@ select {
 .meal-log-cta {
   flex-shrink: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 8px;
   background: #161515;
   color: #fff;
   padding: 8px 12px;
@@ -189,7 +189,6 @@ select {
   line-height: 1;
   letter-spacing: 0;
   cursor: pointer;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
   transition:
     transform 160ms cubic-bezier(0.32, 0.72, 0, 1),
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);

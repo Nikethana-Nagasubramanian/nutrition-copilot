@@ -22,7 +22,10 @@ export async function addLoggedEntry(
     dateKey,
     description,
     sourceMealId,
-    ...macros,
+    calories: macros.calories,
+    protein: macros.protein,
+    carbs: macros.carbs,
+    fat: macros.fat,
   };
   await db.add('entries', entry);
   return entry;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { MacroSummary } from '../components/MacroSummary';
 import { addLoggedEntry, deleteLoggedEntry, getEntriesForDate, todayKey, updateLoggedEntry } from '../db/logEntries';
 import { createRecurringMeal, findRecurringMealByName } from '../db/recurringMeals';
@@ -21,7 +22,6 @@ const ZERO_TARGETS: DailyTargets = {
 const WEEK_DAYS = 7;
 const MONTH_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MEAL_ACTION_WIDTH = 96;
 const SERVER_TRANSCRIPTION_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_SERVER_TRANSCRIPTION === 'true';
 
 type ViewMode = 'today' | 'week' | 'month';
@@ -43,17 +43,6 @@ type MealFeedback = {
 type ComposerState = 'idle' | 'logging' | 'logged';
 type VoiceState = 'idle' | 'recording' | 'transcribing';
 type ComposerUiState = 'idle' | 'typing' | 'recording' | 'transcribing' | 'transcribed' | 'sending' | 'feedback';
-type SwipeLock = 'x' | 'y' | null;
-type SwipeGesture = {
-  id: string;
-  startX: number;
-  startY: number;
-  startOffset: number;
-  offset: number;
-  lock: SwipeLock;
-  moved: boolean;
-  history: Array<{ x: number; t: number }>;
-};
 type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
@@ -266,16 +255,6 @@ function mealBadge(entry: Macros): MealBadge {
   };
 }
 
-function rubberband(value: number, min: number, max: number) {
-  if (value < min) return min + (value - min) * 0.22;
-  if (value > max) return max + (value - max) * 0.22;
-  return value;
-}
-
-function projectedSwipeEndpoint(offset: number, velocity: number) {
-  return offset + velocity * 0.18;
-}
-
 export default function Home() {
   const [entries, setEntries] = useState<LoggedEntry[]>([]);
   const [weekSummaries, setWeekSummaries] = useState<DaySummary[]>([]);
@@ -315,11 +294,8 @@ export default function Home() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [actionsOpenId, setActionsOpenId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [swipeDrag, setSwipeDrag] = useState<{ id: string; offset: number; isDragging: boolean } | null>(null);
-  const [suppressClickId, setSuppressClickId] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement | null>(null);
   const periodTabsRef = useRef<HTMLDivElement | null>(null);
-  const swipeGestureRef = useRef<SwipeGesture | null>(null);
 
   const refresh = useCallback(async () => {
     const monthKeys = pastDaysKeys(MONTH_DAYS);
@@ -953,87 +929,6 @@ export default function Home() {
     setIsMealSheetOpen(true);
   };
 
-  const startMealSwipe = (entryId: string, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-
-    const startOffset = actionsOpenId === entryId ? -MEAL_ACTION_WIDTH : 0;
-    swipeGestureRef.current = {
-      id: entryId,
-      startX: event.clientX,
-      startY: event.clientY,
-      startOffset,
-      offset: startOffset,
-      lock: null,
-      moved: false,
-      history: [{ x: event.clientX, t: performance.now() }],
-    };
-    setActionsOpenId((current) => (current === entryId ? current : null));
-    setSwipeDrag({ id: entryId, offset: startOffset, isDragging: true });
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const moveMealSwipe = (event: PointerEvent<HTMLButtonElement>) => {
-    const gesture = swipeGestureRef.current;
-    if (!gesture) return;
-
-    const dx = event.clientX - gesture.startX;
-    const dy = event.clientY - gesture.startY;
-    const distanceX = Math.abs(dx);
-    const distanceY = Math.abs(dy);
-
-    if (!gesture.lock && (distanceX > 8 || distanceY > 8)) {
-      gesture.lock = distanceX > distanceY * 1.15 ? 'x' : 'y';
-    }
-    if (gesture.lock !== 'x') return;
-
-    event.preventDefault();
-    const offset = rubberband(gesture.startOffset + dx, -MEAL_ACTION_WIDTH, 0);
-    gesture.offset = offset;
-    gesture.moved = gesture.moved || distanceX > 8;
-    const now = performance.now();
-    gesture.history = [...gesture.history.filter((sample) => now - sample.t < 120), { x: event.clientX, t: now }];
-    setSwipeDrag({ id: gesture.id, offset, isDragging: true });
-  };
-
-  const finishMealSwipe = (entryId: string, event: PointerEvent<HTMLButtonElement>) => {
-    const gesture = swipeGestureRef.current;
-    if (!gesture || gesture.id !== entryId) return;
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-
-    if (gesture.lock === 'x') {
-      const first = gesture.history[0];
-      const last = gesture.history[gesture.history.length - 1];
-      const elapsed = Math.max(last.t - first.t, 1);
-      const velocity = ((last.x - first.x) / elapsed) * 1000;
-      const projected = projectedSwipeEndpoint(gesture.offset, velocity);
-      const shouldOpen = velocity < -420 || (velocity <= 420 && projected < -MEAL_ACTION_WIDTH * 0.48);
-      setActionsOpenId(shouldOpen ? entryId : null);
-      setSuppressClickId(entryId);
-      window.setTimeout(() => setSuppressClickId(null), 260);
-    }
-
-    setSwipeDrag(null);
-    swipeGestureRef.current = null;
-  };
-
-  const cancelMealSwipe = (entryId: string, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    if (swipeGestureRef.current?.id === entryId) {
-      swipeGestureRef.current = null;
-      setSwipeDrag(null);
-    }
-  };
-
-  const mealRowOffset = (entryId: string) => {
-    if (swipeDrag?.id === entryId) return swipeDrag.offset;
-    return actionsOpenId === entryId ? -MEAL_ACTION_WIDTH : 0;
-  };
-
   const selectEntry = (entryId: string, shouldScroll = true) => {
     setSelectedEntryId(entryId);
     setActionsOpenId(null);
@@ -1105,63 +1000,72 @@ export default function Home() {
           <ul className="mt-2">
             {entries.map((e) => {
               const badge = mealBadge(e);
-              const rowOffset = mealRowOffset(e.id);
-              const isDragging = swipeDrag?.id === e.id && swipeDrag.isDragging;
+              const isMenuOpen = actionsOpenId === e.id;
               return (
               <li
                 key={e.id}
-                className={`meal-list-item px-2 py-4 ${selectedEntryId === e.id ? 'is-selected' : ''}`}
+                className={`meal-list-item px-2 py-2 ${selectedEntryId === e.id ? 'is-selected' : ''}`}
               >
-                <div className="relative overflow-hidden">
-                  <div className="absolute inset-y-0 right-2 flex items-center gap-3">
-                    <button
-                      className="grid h-10 w-10 place-items-center text-neutral-950"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleEdit(e);
-                      }}
-                      aria-label="Edit"
-                    >
-                      <EditIcon />
-                    </button>
-                    <button
-                      className="grid h-10 w-10 place-items-center text-[#e7000b]"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleDelete(e.id);
-                      }}
-                      aria-label="Delete"
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                  <button
-                    className="relative flex w-full touch-pan-y flex-col items-start gap-1 bg-white text-left will-change-transform"
-                    style={{
-                      transform: `translate3d(${rowOffset}px, 0, 0)`,
-                      transition: isDragging ? 'none' : 'transform 380ms cubic-bezier(0.32, 0.72, 0, 1)',
-                    }}
-                    onPointerDown={(event) => startMealSwipe(e.id, event)}
-                    onPointerMove={moveMealSwipe}
-                    onPointerUp={(event) => finishMealSwipe(e.id, event)}
-                    onPointerCancel={(event) => cancelMealSwipe(e.id, event)}
-                    onClick={() => {
-                      if (suppressClickId === e.id) return;
-                      selectEntry(e.id);
+                <div className="relative">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="flex w-full flex-col items-start gap-1 bg-white text-left"
+                    onClick={() => selectEntry(e.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectEntry(e.id);
+                      }
                     }}
                   >
-                    <div className="flex w-full items-start justify-between gap-3">
+                    <div className="flex w-full items-center justify-between gap-3">
                       <div className="min-w-0 flex-1 truncate text-[15px] font-medium leading-[1.25] text-neutral-950">
                         {e.description}
                       </div>
                       <span className={`shrink-0 rounded-xl px-2.5 py-1 text-[13px] font-semibold leading-none ${badge.className}`}>
                         {badge.label}
                       </span>
+                      <DropdownMenu.Root
+                        open={isMenuOpen}
+                        onOpenChange={(open) => setActionsOpenId(open ? e.id : null)}
+                      >
+                        <DropdownMenu.Trigger asChild>
+                          <button
+                            className="grid h-8 w-8 shrink-0 place-items-center text-neutral-400"
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label="More actions"
+                          >
+                            <MoreIcon />
+                          </button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content
+                            align="end"
+                            sideOffset={4}
+                            collisionPadding={12}
+                            className="z-20 w-[188px] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg shadow-neutral-200/70"
+                          >
+                            <DropdownMenu.Item
+                              className="flex h-9 w-full cursor-pointer items-center whitespace-nowrap rounded-lg px-3 text-left text-[14px] font-medium text-neutral-900 outline-none data-[highlighted]:bg-neutral-50"
+                              onSelect={() => handleEdit(e)}
+                            >
+                              Edit meal
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item
+                              className="flex h-9 w-full cursor-pointer items-center whitespace-nowrap rounded-lg px-3 text-left text-[14px] font-medium text-red-600 outline-none data-[highlighted]:bg-red-50"
+                              onSelect={() => handleDelete(e.id)}
+                            >
+                              Remove from today
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu.Root>
                     </div>
                     <div className="w-full text-[12px] leading-[1.4] text-[#737373]">
                       {Math.round(e.calories)} kcal · {Math.round(e.protein)}g protein · {Math.round(e.carbs)}g carbs · {Math.round(e.fat)}g fat
                     </div>
-                  </button>
+                  </div>
                 </div>
               </li>
               );
@@ -1429,18 +1333,28 @@ function periodSummaryText({
   return `You are close. The averages are useful, but consistency is the thing to improve next.`;
 }
 
-function EditIcon() {
+function EditIcon({ className = 'h-7 w-7' }: { className?: string }) {
   return (
-    <svg className="h-7 w-7" viewBox="28 8 224 224" fill="currentColor" aria-hidden="true">
+    <svg className={className} viewBox="28 8 224 224" fill="currentColor" aria-hidden="true">
       <path d="M221.657 34.344a8 8 0 0 0-11.314 0L196 48.687 191.314 44a24 24 0 0 0-33.941 0L48 153.373A24 24 0 0 0 40.971 170.343V204a16 16 0 0 0 16 16h33.657A24 24 0 0 0 107.598 212.971L216.971 103.598a24 24 0 0 0 0-33.941L212.284 64.971 226.627 50.628a8 8 0 0 0 0-11.314ZM68 180.687 79.314 192H57.971v-21.343ZM96.284 201.657a8 8 0 0 1-11.314 0L59.314 176a8 8 0 0 1 0-11.314L136 88 172.971 124.971ZM205.657 92.284 184.284 113.657 147.314 76.686 168.686 55.314a8 8 0 0 1 11.314 0L205.657 80.971A8 8 0 0 1 205.657 92.284Z" />
     </svg>
   );
 }
 
-function TrashIcon() {
+function TrashIcon({ className = 'h-7 w-7' }: { className?: string }) {
   return (
-    <svg className="h-7 w-7" viewBox="4 8 224 224" fill="currentColor" aria-hidden="true">
+    <svg className={className} viewBox="4 8 224 224" fill="currentColor" aria-hidden="true">
       <path d="M216 48H176V40a24 24 0 0 0-24-24H104A24 24 0 0 0 80 40v8H40a8 8 0 0 0 0 16h8V208a16 16 0 0 0 16 16H192a16 16 0 0 0 16-16V64h8a8 8 0 0 0 0-16ZM96 40a8 8 0 0 1 8-8h48a8 8 0 0 1 8 8v8H96ZM192 208H64V64H192ZM112 104v64a8 8 0 0 1-16 0V104a8 8 0 0 1 16 0Zm48 0v64a8 8 0 0 1-16 0V104a8 8 0 0 1 16 0Z" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="5" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="19" cy="12" r="1.6" />
     </svg>
   );
 }

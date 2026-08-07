@@ -273,7 +273,7 @@ export default function Meals() {
                 <span
                   role="button"
                   tabIndex={0}
-                  className="btn-base btn-primary btn-sm shrink-0"
+                  className="btn-base btn-secondary btn-sm shrink-0"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleLogNow(meal);
