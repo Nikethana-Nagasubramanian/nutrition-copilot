@@ -4,10 +4,11 @@ import { MacroSummary } from '../components/MacroSummary';
 import { getEntriesForDate, todayKey } from '../db/logEntries';
 import { getDailyTargets, getWhoopConfig } from '../db/settings';
 import { useRecorder } from '../hooks/useRecorder';
+import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import { addDevLog } from '../services/devLogs';
 import { askNutritionQuestion } from '../services/openai';
 import { transcribeAudio } from '../services/transcription';
-import { whoopNutritionContext } from '../services/whoop';
+import { whoopDailyInsight, whoopNutritionContext } from '../services/whoop';
 import type { AskNutritionResult, DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
 const ZERO_MACROS: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
@@ -70,7 +71,7 @@ export default function Ask() {
     setError('Microphone access was blocked. Allow access and try again.');
   }, []);
 
-  const { isRecording, startRecording, stopRecording } = useRecorder(handleRecordingStop, handleRecordingError);
+  const { isRecording, startRecording, stopRecording, level } = useRecorder(handleRecordingStop, handleRecordingError);
 
   const refresh = useCallback(async () => {
     const [entries, dailyTargets, whoopConfig] = await Promise.all([getEntriesForDate(todayKey()), getDailyTargets(), getWhoopConfig()]);
@@ -108,7 +109,7 @@ export default function Ask() {
   };
 
   return (
-    <div className="log-paper-screen mx-auto max-w-md px-3 pb-24 pt-[72px]">
+    <div className={`log-paper-screen ${PAGE_CONTAINER_CLASS}`}>
       <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Ask Nutri</h1>
       <p className="mt-2 text-sm leading-5 text-neutral-500">
         Ask Nutri how a meal fits into your meal plan today.
@@ -117,7 +118,7 @@ export default function Ask() {
       <div className={`nutri-composer mt-7 ${isRecording ? 'is-recording' : ''}`}>
         {isRecording ? (
           <div className="nutri-recording-row">
-            <VoiceWaveform />
+            <VoiceWaveform level={level} />
             <button className="nutri-circle-button is-stop" type="button" aria-label="Stop recording" onClick={stopRecording}>
               <span className="voice-stop-glyph" />
             </button>
@@ -174,9 +175,9 @@ export default function Ask() {
         <MacroSummary totals={totals} targets={targets} />
       </div>
 
-      {whoopSummary && (
-        <p className="mt-3 rounded-lg bg-neutral-50 px-3 py-2 text-xs font-medium leading-5 text-neutral-500">
-          WHOOP context on: {whoopNutritionContext(whoopSummary)}
+      {whoopSummary && whoopDailyInsight(whoopSummary) && (
+        <p className="mt-3 rounded-lg bg-neutral-50 px-3 py-2 text-xs font-medium leading-5 text-neutral-600">
+          {whoopDailyInsight(whoopSummary)}
         </p>
       )}
 
@@ -186,13 +187,16 @@ export default function Ask() {
   );
 }
 
-function VoiceWaveform() {
+function VoiceWaveform({ level }: { level: number }) {
   const bars = [5, 10, 16, 22, 12, 28, 18, 9, 24, 14, 20, 7, 17, 11, 25, 13];
+  const activeLevel = level > 0.08 ? level : 0;
   return (
-    <div className="voice-waveform is-speaking" aria-hidden="true">
-      {bars.map((height, index) => (
-        <span key={`${height}-${index}`} style={{ height: `${height}px` }} />
-      ))}
+    <div className={`voice-waveform ${activeLevel > 0 ? 'is-speaking' : ''}`} aria-hidden="true">
+      {bars.map((height, index) => {
+        const wave = 0.55 + Math.abs(Math.sin(index * 1.7)) * 0.55;
+        const liveHeight = Math.max(2, height * activeLevel * wave);
+        return <span key={`${height}-${index}`} style={{ height: `${liveHeight}px` }} />;
+      })}
     </div>
   );
 }

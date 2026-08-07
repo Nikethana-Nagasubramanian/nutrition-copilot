@@ -8,9 +8,11 @@ import {
   exchangeWhoopCode,
   fetchWhoopSummary,
   makeWhoopState,
-  WHOOP_SCOPES,
 } from '../services/whoop';
+import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import type { DailyTargets, OllamaConfig, WhoopConfig } from '../types/nutrition';
+
+const WHOOP_CLIENT_ID = import.meta.env.VITE_WHOOP_CLIENT_ID ?? '';
 
 interface RangeFields {
   min: string;
@@ -59,7 +61,6 @@ export default function Settings() {
     lastSummary: null,
   });
   const [ollamaSaved, setOllamaSaved] = useState(false);
-  const [whoopSaved, setWhoopSaved] = useState(false);
   const [whoopMessage, setWhoopMessage] = useState<string | null>(null);
   const [whoopSyncing, setWhoopSyncing] = useState(false);
   const [ollamaTest, setOllamaTest] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
@@ -75,7 +76,11 @@ export default function Settings() {
     });
     getOllamaConfig().then(setOllama);
     getWhoopConfig().then(async (config) => {
-      const nextConfig = { ...config, redirectUri: config.redirectUri || defaultWhoopRedirectUri() };
+      const nextConfig = {
+        ...config,
+        clientId: config.clientId || WHOOP_CLIENT_ID,
+        redirectUri: defaultWhoopRedirectUri(),
+      };
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
       const state = params.get('state');
@@ -84,8 +89,20 @@ export default function Settings() {
           const connectedConfig = await exchangeWhoopCode({ ...nextConfig, authState: state }, code);
           setWhoop(connectedConfig);
           await setWhoopConfig(connectedConfig);
-          setWhoopMessage('WHOOP connected. Sync when you want to pull today’s recovery/sleep/workout context.');
           window.history.replaceState({}, '', window.location.pathname);
+          try {
+            const summary = await fetchWhoopSummary(connectedConfig);
+            const syncedConfig = { ...connectedConfig, lastSummary: summary, lastSyncAt: new Date().toISOString() };
+            setWhoop(syncedConfig);
+            await setWhoopConfig(syncedConfig);
+          } catch (syncError) {
+            addDevLog({
+              level: 'warn',
+              source: 'WHOOP',
+              message: 'Initial WHOOP sync after connecting failed.',
+              details: syncError instanceof Error ? syncError.message : String(syncError),
+            });
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'WHOOP token exchange failed.';
           setWhoopMessage(message);
@@ -94,8 +111,12 @@ export default function Settings() {
         return;
       }
       setWhoop(nextConfig);
+      if (nextConfig.accessToken) {
+        handleSyncWhoop(nextConfig);
+      }
     });
     setLogs(getDevLogs());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSaveOllama = async () => {
@@ -104,27 +125,38 @@ export default function Settings() {
     setTimeout(() => setOllamaSaved(false), 1500);
   };
 
-  const handleSaveWhoop = async () => {
-    await setWhoopConfig(whoop);
-    setWhoopSaved(true);
-    setTimeout(() => setWhoopSaved(false), 1500);
-  };
-
   const handleConnectWhoop = async () => {
     const nextWhoop = {
       ...whoop,
-      redirectUri: whoop.redirectUri || defaultWhoopRedirectUri(),
+      clientId: whoop.clientId || WHOOP_CLIENT_ID,
+      redirectUri: defaultWhoopRedirectUri(),
       authState: makeWhoopState(),
     };
     await setWhoopConfig(nextWhoop);
     window.location.href = buildWhoopAuthUrl(nextWhoop);
   };
 
-  const handleSyncWhoop = async () => {
+  const handleDisconnectWhoop = async () => {
+    const nextWhoop: WhoopConfig = {
+      ...whoop,
+      authorizationCode: '',
+      accessToken: '',
+      refreshToken: '',
+      expiresAt: null,
+      scope: '',
+      connectedAt: null,
+      lastSyncAt: null,
+      lastSummary: null,
+    };
+    setWhoop(nextWhoop);
+    await setWhoopConfig(nextWhoop);
+  };
+
+  const handleSyncWhoop = async (config: WhoopConfig = whoop) => {
     setWhoopSyncing(true);
     setWhoopMessage(null);
     try {
-      const authorized = await ensureWhoopAccess(whoop);
+      const authorized = await ensureWhoopAccess(config);
       const summary = await fetchWhoopSummary(authorized);
       const syncedConfig = {
         ...authorized,
@@ -133,7 +165,6 @@ export default function Settings() {
       };
       setWhoop(syncedConfig);
       await setWhoopConfig(syncedConfig);
-      setWhoopMessage('WHOOP synced.');
       addDevLog({ level: 'info', source: 'WHOOP', message: 'WHOOP summary synced.' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'WHOOP sync failed.';
@@ -175,9 +206,9 @@ export default function Settings() {
 
   return (
     <div className="min-h-full bg-white">
-      <div className="mx-auto max-w-md px-4 pb-28 pt-5">
-      <h1 className="text-[2rem] font-bold leading-tight text-neutral-950">Preferences</h1>
-      <p className="mt-1 text-sm text-neutral-500">
+      <div className={PAGE_CONTAINER_CLASS}>
+      <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Preferences</h1>
+      <p className="mt-2 text-sm leading-5 text-neutral-500">
         Set your macro ranges and tune the way Nutri works for you.
       </p>
 
@@ -192,76 +223,45 @@ export default function Settings() {
         ))}
       </div>
 
-      <button
-        className="mt-4 w-full rounded-2xl bg-green-600 py-3 text-sm font-semibold text-white"
-        onClick={handleSave}
-      >
+      <button className="btn-base btn-primary mt-4 w-full" onClick={handleSave}>
         {saved ? 'Saved!' : 'Save'}
       </button>
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-neutral-900">WHOOP</h2>
-        <p className="mt-1 text-xs text-neutral-500">
-          Connect recovery, strain, sleep, workouts, and body metrics as context for your meal plan.
-        </p>
-
-        <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-white p-3">
-          <div className="rounded-lg bg-neutral-50 p-3 text-xs leading-5 text-neutral-600">
-            <div><span className="font-semibold text-neutral-900">Redirect URL:</span> paste the exact value below into WHOOP.</div>
-            <div><span className="font-semibold text-neutral-900">Privacy URL:</span> any public placeholder page you control is fine for dev.</div>
-            <div><span className="font-semibold text-neutral-900">Server env:</span> add <span className="font-mono">WHOOP_CLIENT_SECRET</span> to your local <span className="font-mono">.env</span>.</div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-neutral-500">Client ID</label>
-            <input
-              className="mt-1 w-full rounded-lg border border-neutral-200 bg-white px-3 py-3 text-base outline-none focus:border-neutral-400"
-              placeholder="WHOOP Developer Dashboard client id"
-              value={whoop.clientId}
-              onChange={(event) => setWhoop((current) => ({ ...current, clientId: event.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-neutral-500">Redirect URL</label>
-            <input
-              className="mt-1 w-full rounded-lg border border-neutral-200 bg-white px-3 py-3 text-base outline-none focus:border-neutral-400"
-              value={whoop.redirectUri}
-              onChange={(event) => setWhoop((current) => ({ ...current, redirectUri: event.target.value }))}
-            />
-          </div>
-          <div className="rounded-lg bg-neutral-50 p-3">
-            <div className="text-[10px] font-bold uppercase text-neutral-400">Scopes</div>
-            <p className="mt-1 text-xs leading-5 text-neutral-600">{WHOOP_SCOPES.join(' · ')}</p>
-          </div>
-          {whoop.connectedAt && (
-            <p className="rounded-lg bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
-              Connected at {new Date(whoop.connectedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
-            </p>
-          )}
-          {whoop.lastSummary && <WhoopSummaryCard whoop={whoop} />}
-          {whoopMessage && <p className="text-xs font-medium leading-5 text-amber-700">{whoopMessage}</p>}
-          <div className="flex gap-2">
-            <button
-              className="flex-1 rounded-lg bg-neutral-100 py-3 text-sm font-semibold text-neutral-800"
-              onClick={handleSaveWhoop}
-            >
-              {whoopSaved ? 'Saved!' : 'Save'}
+        {whoop.accessToken ? (
+          <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-white p-3">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
+                <CheckIcon /> Connected
+              </span>
+              {whoopSyncing && <span className="text-xs text-neutral-400">Syncing…</span>}
+            </div>
+            <p className="text-xs leading-5 text-neutral-500">Recovery · Sleep · Strain</p>
+            {whoop.lastSummary && <WhoopSummaryCard whoop={whoop} />}
+            {whoopMessage && <p className="text-xs font-medium leading-5 text-amber-700">{whoopMessage}</p>}
+            <button className="btn-base btn-outline w-full" onClick={handleDisconnectWhoop}>
+              Disconnect
             </button>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-white p-3">
+            <p className="text-xs leading-5 text-neutral-500">
+              Use your recovery, sleep and strain to personalize Nutri's recommendations.
+            </p>
+            {whoopMessage && <p className="text-xs font-medium leading-5 text-amber-700">{whoopMessage}</p>}
             <button
-              className="flex-1 rounded-lg bg-neutral-950 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="btn-base btn-primary w-full"
               onClick={handleConnectWhoop}
-              disabled={!whoop.clientId || !(whoop.redirectUri || defaultWhoopRedirectUri())}
+              disabled={!WHOOP_CLIENT_ID}
             >
               Connect WHOOP
             </button>
+            {!WHOOP_CLIENT_ID && (
+              <p className="text-xs text-neutral-400">WHOOP isn't configured for this deployment yet.</p>
+            )}
           </div>
-          <button
-            className="w-full rounded-lg border border-neutral-200 bg-white py-3 text-sm font-semibold text-neutral-900 disabled:opacity-50"
-            onClick={handleSyncWhoop}
-            disabled={!whoop.accessToken || whoopSyncing}
-          >
-            {whoopSyncing ? 'Syncing WHOOP...' : 'Sync WHOOP context'}
-          </button>
-        </div>
+        )}
       </section>
 
       <section className="mt-8">
@@ -285,7 +285,7 @@ export default function Settings() {
           <div>
             <label className="text-xs font-semibold text-neutral-500">Ollama base URL (Tailscale)</label>
             <input
-              className="mt-1 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              className="input-base mt-1"
               placeholder="https://your-desktop.tailXXXX.ts.net"
               value={ollama.baseUrl}
               onChange={(e) => setOllama((o) => ({ ...o, baseUrl: e.target.value }))}
@@ -295,7 +295,7 @@ export default function Settings() {
           <div>
             <label className="text-xs font-semibold text-neutral-500">Model name</label>
             <input
-              className="mt-1 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              className="input-base mt-1"
               placeholder="llama3.1"
               value={ollama.model}
               onChange={(e) => setOllama((o) => ({ ...o, model: e.target.value }))}
@@ -305,7 +305,7 @@ export default function Settings() {
           <div>
             <label className="text-xs font-semibold text-neutral-500">Timeout (ms)</label>
             <input
-              className="mt-1 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
+              className="input-base mt-1"
               inputMode="numeric"
               placeholder="20000"
               value={String(ollama.timeoutMs)}
@@ -318,14 +318,11 @@ export default function Settings() {
           </div>
 
           <div className="flex gap-2">
-            <button
-              className="flex-1 rounded-2xl bg-green-600 py-3 text-sm font-semibold text-white"
-              onClick={handleSaveOllama}
-            >
+            <button className="btn-base btn-secondary flex-1" onClick={handleSaveOllama}>
               {ollamaSaved ? 'Saved!' : 'Save'}
             </button>
             <button
-              className="flex-1 rounded-2xl bg-neutral-900 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              className="btn-base btn-primary flex-1"
               onClick={handleTestOllama}
               disabled={!ollama.baseUrl || ollamaTest === 'testing'}
             >
@@ -346,14 +343,11 @@ export default function Settings() {
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-neutral-900">Developer Logs</h2>
           <div className="flex gap-2">
-            <button
-              className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-700 shadow-sm shadow-neutral-200/70"
-              onClick={() => setLogs(getDevLogs())}
-            >
+            <button className="btn-base btn-outline btn-sm" onClick={() => setLogs(getDevLogs())}>
               Refresh
             </button>
             <button
-              className="rounded-xl bg-neutral-900 px-3 py-2 text-xs font-semibold text-white"
+              className="btn-base btn-primary btn-sm"
               onClick={() => {
                 clearDevLogs();
                 setLogs([]);
@@ -434,6 +428,14 @@ function WhoopSummaryCard({ whoop }: { whoop: WhoopConfig }) {
           : 'No workout found in the last day.'}
       </p>
     </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
   );
 }
 

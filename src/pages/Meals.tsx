@@ -6,8 +6,10 @@ import {
   updateRecurringMeal,
 } from '../db/recurringMeals';
 import { addLoggedEntry } from '../db/logEntries';
+import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import { parseMealDescription } from '../services/openai';
 import type { RecurringMeal } from '../types/nutrition';
+import dumplingIcon from '../assets/image.png';
 
 interface FormState {
   id: string | null;
@@ -71,13 +73,31 @@ export default function Meals() {
   const handleSave = async () => {
     if (!form.name.trim() || isSaving) return;
     setIsSaving(true);
-    const macros = {
-      calories: Number(form.calories) || 0,
-      protein: Number(form.protein) || 0,
-      carbs: Number(form.carbs) || 0,
-      fat: Number(form.fat) || 0,
-    };
+    setEstimateError(null);
     try {
+      let macros = {
+        calories: Number(form.calories) || 0,
+        protein: Number(form.protein) || 0,
+        carbs: Number(form.carbs) || 0,
+        fat: Number(form.fat) || 0,
+      };
+      const hasMacros = macros.calories || macros.protein || macros.carbs || macros.fat;
+      if (!form.id && !hasMacros && form.description.trim()) {
+        setIsEstimating(true);
+        try {
+          const parsed = await parseMealDescription(form.description.trim());
+          macros = {
+            calories: Math.round(parsed.totals.calories),
+            protein: Math.round(parsed.totals.protein),
+            carbs: Math.round(parsed.totals.carbs),
+            fat: Math.round(parsed.totals.fat),
+          };
+        } catch (err: any) {
+          setEstimateError(err?.message ?? 'Could not estimate macros.');
+        } finally {
+          setIsEstimating(false);
+        }
+      }
       if (form.id) {
         await updateRecurringMeal(form.id, form.name.trim(), form.description.trim(), macros);
       } else {
@@ -96,154 +116,179 @@ export default function Meals() {
     await refresh();
   };
 
-  const handleEstimate = async () => {
-    if (!form.description.trim() || isEstimating) return;
-    setIsEstimating(true);
-    setEstimateError(null);
-    try {
-      const parsed = await parseMealDescription(form.description.trim());
-      setForm((f) => ({
-        ...f,
-        calories: String(Math.round(parsed.totals.calories)),
-        protein: String(Math.round(parsed.totals.protein)),
-        carbs: String(Math.round(parsed.totals.carbs)),
-        fat: String(Math.round(parsed.totals.fat)),
-      }));
-    } catch (err: any) {
-      setEstimateError(err?.message ?? 'Could not estimate macros.');
-    } finally {
-      setIsEstimating(false);
-    }
-  };
-
   const handleLogNow = async (meal: RecurringMeal) => {
     await addLoggedEntry(meal.name, meal, meal.id);
     setToast(`${meal.name} logged`);
   };
 
   return (
-    <div className="mx-auto max-w-md px-4 pb-28 pt-5">
+    <div className={PAGE_CONTAINER_CLASS}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[2rem] font-bold leading-tight text-neutral-950">Meals</h1>
-          <p className="mt-1 text-sm text-neutral-500">Save repeat meals and log them without AI.</p>
+          <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Meals</h1>
+          {meals.length > 0 && (
+            <p className="mt-2 text-sm leading-5 text-neutral-500">Save your go-to meals for faster logging.</p>
+          )}
         </div>
-        <button
-          className="rounded-2xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white"
-          onClick={openCreate}
-        >
-          Add
-        </button>
+        {meals.length > 0 && (
+          <button className="btn-base btn-primary" onClick={openCreate}>
+            Add
+          </button>
+        )}
       </div>
 
       {formOpen && (
-        <div className="mt-5 rounded-[1.5rem] bg-white p-4 shadow-sm shadow-neutral-200/70">
-          <h2 className="text-lg font-bold text-neutral-900">{form.id ? 'Edit Meal' : 'New Meal'}</h2>
-
-          <input
-            className="mt-4 w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-            placeholder="Name (e.g. Protein Shake)"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <textarea
-            className="mt-3 w-full resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-            rows={3}
-            placeholder="Description (e.g. 1.5 scoop whey, 2 tbsp yogurt...)"
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          />
-
+        <div className="meal-sheet-layer" role="presentation">
           <button
-            className="mt-3 w-full rounded-2xl bg-neutral-900 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            onClick={handleEstimate}
-            disabled={!form.description.trim() || isEstimating}
-          >
-            {isEstimating ? 'Estimating…' : 'Estimate with AI'}
-          </button>
-          {estimateError && <p className="mt-2 text-xs font-semibold text-red-600">{estimateError}</p>}
+            className="meal-sheet-scrim"
+            type="button"
+            aria-label="Dismiss meal form"
+            onClick={() => {
+              setFormOpen(false);
+              setForm(emptyForm);
+            }}
+            disabled={isSaving}
+          />
+          <section className="meal-bottom-sheet" role="dialog" aria-modal="true" aria-label={form.id ? 'Edit meal' : 'New meal'}>
+            <div className="meal-sheet-handle-zone">
+              <div className="meal-sheet-handle" />
+            </div>
+            <div className="meal-sheet-content">
+              <input
+                className="input-base"
+                placeholder="Name (e.g. Protein Shake)"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+              <textarea
+                className="input-base mt-3 resize-none"
+                style={{ minHeight: '70px' }}
+                rows={3}
+                placeholder="Ingredients (e.g. 1.5 scoop whey, 2 tbsp yogurt...)"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <input
-              className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-              placeholder="Calories"
-              inputMode="numeric"
-              value={form.calories}
-              onChange={(e) => setForm((f) => ({ ...f, calories: e.target.value }))}
-            />
-            <input
-              className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-              placeholder="Protein (g)"
-              inputMode="numeric"
-              value={form.protein}
-              onChange={(e) => setForm((f) => ({ ...f, protein: e.target.value }))}
-            />
-            <input
-              className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-              placeholder="Carbs (g)"
-              inputMode="numeric"
-              value={form.carbs}
-              onChange={(e) => setForm((f) => ({ ...f, carbs: e.target.value }))}
-            />
-            <input
-              className="rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-base outline-none focus:border-green-500"
-              placeholder="Fat (g)"
-              inputMode="numeric"
-              value={form.fat}
-              onChange={(e) => setForm((f) => ({ ...f, fat: e.target.value }))}
-            />
-          </div>
+              {form.id && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="relative">
+                    <input
+                      className="input-base pr-11"
+                      placeholder="Calories"
+                      inputMode="numeric"
+                      value={form.calories}
+                      onChange={(e) => setForm((f) => ({ ...f, calories: e.target.value }))}
+                    />
+                    <span className="input-unit-badge">kcal</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      className="input-base pr-8"
+                      placeholder="Protein"
+                      inputMode="numeric"
+                      value={form.protein}
+                      onChange={(e) => setForm((f) => ({ ...f, protein: e.target.value }))}
+                    />
+                    <span className="input-unit-badge">g</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      className="input-base pr-8"
+                      placeholder="Carbs"
+                      inputMode="numeric"
+                      value={form.carbs}
+                      onChange={(e) => setForm((f) => ({ ...f, carbs: e.target.value }))}
+                    />
+                    <span className="input-unit-badge">g</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      className="input-base pr-8"
+                      placeholder="Fat"
+                      inputMode="numeric"
+                      value={form.fat}
+                      onChange={(e) => setForm((f) => ({ ...f, fat: e.target.value }))}
+                    />
+                    <span className="input-unit-badge">g</span>
+                  </div>
+                </div>
+              )}
+              {estimateError && <p className="mt-2 text-xs font-semibold text-red-600">{estimateError}</p>}
 
-          <div className="mt-4 flex gap-2">
-            <button
-              className="flex-1 rounded-2xl bg-neutral-100 py-3 text-sm font-semibold text-neutral-700"
-              onClick={() => {
-                setFormOpen(false);
-                setForm(emptyForm);
-              }}
-              disabled={isSaving}
-            >
-              Cancel
-            </button>
-            <button
-              className="flex-1 rounded-2xl bg-green-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
-              onClick={handleSave}
-              disabled={!form.name.trim() || isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Save'}
-            </button>
-          </div>
+              <button
+                className="btn-base btn-primary mt-4 w-full"
+                onClick={handleSave}
+                disabled={!form.name.trim() || isSaving}
+              >
+                {isSaving ? (isEstimating ? 'Calculating nutrition…' : 'Saving...') : form.id ? 'Save changes' : 'Save meal'}
+              </button>
+
+              {form.id && (
+                <button
+                  className="mt-3 w-full text-center text-[13px] font-medium text-red-600"
+                  onClick={async () => {
+                    if (!window.confirm(`Delete "${form.name}"? This can't be undone.`)) return;
+                    await handleDelete(form.id!);
+                    setFormOpen(false);
+                    setForm(emptyForm);
+                  }}
+                >
+                  Delete meal
+                </button>
+              )}
+            </div>
+          </section>
         </div>
       )}
 
-      {meals.length === 0 ? (
-        <p className="mt-8 text-center text-sm text-neutral-400">
-          No recurring meals yet. Add ones you eat often to log them instantly, no AI call needed.
-        </p>
+      {meals.length === 0 && !formOpen ? (
+        <div className="mt-10 flex flex-col items-center text-center">
+          <img src={dumplingIcon} alt="" className="h-40 w-40" />
+          <p className="mt-4 text-sm text-neutral-400">
+            Save your go-to meals for faster logging.
+          </p>
+          <button className="btn-base btn-primary mt-4" onClick={openCreate}>
+            Add a meal
+          </button>
+        </div>
       ) : (
         <ul className="mt-4 space-y-3">
           {meals.map((meal) => (
-            <li key={meal.id} className="flex items-center gap-3 rounded-[1.25rem] bg-white p-4 shadow-sm shadow-neutral-200/70">
-              <button className="min-w-0 flex-1 text-left" onClick={() => openEdit(meal)}>
-                <div className="truncate text-sm font-semibold text-neutral-900">{meal.name}</div>
-                {meal.description && (
-                  <div className="truncate text-xs text-neutral-500">{meal.description}</div>
-                )}
-                <div className="mt-1 text-xs text-neutral-500">
-                  {Math.round(meal.calories)} kcal · {Math.round(meal.protein)}g protein · {Math.round(meal.carbs)}g carbs · {Math.round(meal.fat)}g fat
+            <li key={meal.id}>
+              <button
+                className="flex w-full items-center gap-3 rounded-[1.25rem] bg-white p-4 text-left shadow-sm shadow-neutral-200/70"
+                onClick={() => openEdit(meal)}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-bold text-neutral-900">{meal.name}</div>
+                  {meal.description && (
+                    <div className="mt-0.5 truncate text-xs text-neutral-400">{meal.description}</div>
+                  )}
+                  <div className="mt-1 text-xs text-neutral-400">
+                    <span className="font-medium text-neutral-600">{Math.round(meal.calories)} kcal</span>
+                    {' · '}
+                    {Math.round(meal.protein)}g P · {Math.round(meal.carbs)}g C · {Math.round(meal.fat)}g F
+                  </div>
                 </div>
-              </button>
-              <div className="flex flex-col items-end gap-2">
-                <button
-                  className="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
-                  onClick={() => handleLogNow(meal)}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="btn-base btn-primary btn-sm shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLogNow(meal);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      handleLogNow(meal);
+                    }
+                  }}
                 >
-                  Log
-                </button>
-                <button className="text-xs font-medium text-red-600" onClick={() => handleDelete(meal.id)}>
-                  Delete
-                </button>
-              </div>
+                  Log meal
+                </span>
+              </button>
             </li>
           ))}
         </ul>

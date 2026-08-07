@@ -131,6 +131,24 @@ export function whoopNutritionContext(summary: WhoopSummary | null | undefined):
   return parts.length ? parts.join(', ') : null;
 }
 
+export function whoopDailyInsight(summary: WhoopSummary | null | undefined): string | null {
+  if (!summary) return null;
+  const strain = summary.cycle?.strain ?? null;
+  const recovery = summary.recovery?.score ?? null;
+  const sleep = summary.sleep?.performancePercentage ?? null;
+
+  if (recovery != null && recovery < 45) {
+    return `Low recovery today · ${Math.round(recovery)}%. Keep meals balanced and prioritize protein.`;
+  }
+  if (strain != null && strain >= 14) {
+    return `High strain today · ${strain.toFixed(1)}. You've used more energy than usual — there's room for more carbs.`;
+  }
+  if (sleep != null && sleep < 70) {
+    return `Lighter sleep last night · ${Math.round(sleep)}%. Keep meals steady and protein-forward today.`;
+  }
+  return null;
+}
+
 export function whoopMealNudge(summary: WhoopSummary | null | undefined, meal: { protein: number; carbs: number; calories: number }): string | null {
   if (!summary) return null;
   const strain = summary.cycle?.strain ?? null;

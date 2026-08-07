@@ -4,7 +4,7 @@ import type { Macros, RecurringMeal } from '../types/nutrition';
 export async function getAllRecurringMeals(): Promise<RecurringMeal[]> {
   const db = await getDb();
   const meals = await db.getAll('recurringMeals');
-  return meals.sort((a, b) => a.name.localeCompare(b.name));
+  return meals.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function createRecurringMeal(

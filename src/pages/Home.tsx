@@ -6,7 +6,8 @@ import { getDailyTargets, getWhoopConfig } from '../db/settings';
 import { addDevLog } from '../services/devLogs';
 import { parseMealDescription } from '../services/openai';
 import { transcribeAudio } from '../services/transcription';
-import { whoopMealNudge } from '../services/whoop';
+import { whoopDailyInsight, whoopMealNudge } from '../services/whoop';
+import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import type { DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
 const ZERO_MACROS: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
@@ -1058,8 +1059,11 @@ export default function Home() {
   const composerExpanded = composerUiState === 'typing' || composerUiState === 'transcribed';
 
   return (
-    <div className="log-paper-screen mx-auto max-w-md px-3 pb-24 pt-[72px]">
+    <div className={`log-paper-screen ${PAGE_CONTAINER_CLASS}`}>
       <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Let's hit those macros</h1>
+      {viewMode === 'today' && whoopSummary && whoopDailyInsight(whoopSummary) && (
+        <p className="mt-2 text-sm leading-5 text-neutral-500">{whoopDailyInsight(whoopSummary)}</p>
+      )}
 
       <div className="period-tabs mt-8 scroll-mt-[52px]" ref={periodTabsRef}>
         {(['today', 'week', 'month'] as ViewMode[]).map((mode) => (
