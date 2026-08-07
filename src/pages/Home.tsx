@@ -1336,22 +1336,6 @@ function periodSummaryText({
   return `You are close. The averages are useful, but consistency is the thing to improve next.`;
 }
 
-function EditIcon({ className = 'h-7 w-7' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="28 8 224 224" fill="currentColor" aria-hidden="true">
-      <path d="M221.657 34.344a8 8 0 0 0-11.314 0L196 48.687 191.314 44a24 24 0 0 0-33.941 0L48 153.373A24 24 0 0 0 40.971 170.343V204a16 16 0 0 0 16 16h33.657A24 24 0 0 0 107.598 212.971L216.971 103.598a24 24 0 0 0 0-33.941L212.284 64.971 226.627 50.628a8 8 0 0 0 0-11.314ZM68 180.687 79.314 192H57.971v-21.343ZM96.284 201.657a8 8 0 0 1-11.314 0L59.314 176a8 8 0 0 1 0-11.314L136 88 172.971 124.971ZM205.657 92.284 184.284 113.657 147.314 76.686 168.686 55.314a8 8 0 0 1 11.314 0L205.657 80.971A8 8 0 0 1 205.657 92.284Z" />
-    </svg>
-  );
-}
-
-function TrashIcon({ className = 'h-7 w-7' }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="4 8 224 224" fill="currentColor" aria-hidden="true">
-      <path d="M216 48H176V40a24 24 0 0 0-24-24H104A24 24 0 0 0 80 40v8H40a8 8 0 0 0 0 16h8V208a16 16 0 0 0 16 16H192a16 16 0 0 0 16-16V64h8a8 8 0 0 0 0-16ZM96 40a8 8 0 0 1 8-8h48a8 8 0 0 1 8 8v8H96ZM192 208H64V64H192ZM112 104v64a8 8 0 0 1-16 0V104a8 8 0 0 1 16 0Zm48 0v64a8 8 0 0 1-16 0V104a8 8 0 0 1 16 0Z" />
-    </svg>
-  );
-}
-
 function MoreIcon() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
