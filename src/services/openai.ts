@@ -1,4 +1,4 @@
-import type { AskNutritionResult, DailyTargets, Macros, ParsedMeal, WhoopSummary } from '../types/nutrition';
+import type { AskNutritionResult, ParsedMeal } from '../types/nutrition';
 import { addDevLog } from './devLogs';
 import { getOllamaConfig } from '../db/settings';
 
@@ -84,8 +84,6 @@ Rules:
 - If the user asks about a food without quantity, assume exactly one standard serving or one standard package.
 - Do not assume extra servings, add-ons, eggs, sides, or toppings unless named.
 - Estimate conservatively: never overestimate protein, never underestimate calories.
-- Suggestions are allowed, but keep them short and directly tied to the user's remaining macros.
-- If WHOOP context is provided, use it only when relevant. High strain can justify more carbs/fuel; low recovery or poor sleep should bias toward protein-forward, steady meals. Keep it specific and brief.
 - Return ONLY valid JSON matching this exact shape, no prose, no markdown fences:
 {
   "verdict": "yes" | "caution" | "no",
@@ -97,7 +95,17 @@ Rules:
   "summary": string,
   "suggestion": string | null
 }
-Summary must be one short sentence. Remaining values may be negative when over target.`,
+
+"summary" (1-2 short sentences):
+- If a concrete tweak to what the user asked (different quantity, an added/swapped side, more protein) would fit their day meaningfully better, phrase it as a specific alternative: "Consider [tweaked meal] instead (~X kcal, Yg protein, Zg carbs, Wg fat), which [fits comfortably / is still tight / etc.]."
+- Otherwise, just give the direct answer for exactly what they asked.
+
+"suggestion" (1-2 short sentences, natural tone, not clinical):
+- Name whichever macro (protein/carbs/fat) is most short or most over relative to today's remaining targets, with the actual gram amount.
+- If WHOOP context is provided, weave it in naturally where it actually changes the read — e.g. high strain justifies more carbs; low recovery or poor sleep favors protein-forward, steady meals; solid recovery/sleep is worth a brief mention when relevant. Never state WHOOP numbers that weren't given to you, and never present this as medical advice.
+- If no WHOOP context is available, base this purely on the macro-balance read.
+
+Remaining values may be negative when over target.`,
     user: `Today so far: ${todayTotals}\nDaily targets: ${targets}\nWHOOP context: ${whoopContext || 'not connected or not synced'}\nQuestion: ${question}`,
   });
 
@@ -106,33 +114,6 @@ Summary must be one short sentence. Remaining values may be negative when over t
     throw new Error('AI response was missing expected ask fields.');
   }
   return parsed;
-}
-
-export async function generateWhoopDailyInsight(
-  summary: WhoopSummary,
-  totals: Macros,
-  targets: DailyTargets
-): Promise<string | null> {
-  const facts: string[] = [];
-  if (summary.recovery?.score != null) facts.push(`recovery ${Math.round(summary.recovery.score)}%`);
-  if (summary.cycle?.strain != null) facts.push(`strain ${summary.cycle.strain.toFixed(1)}`);
-  if (summary.sleep?.performancePercentage != null) facts.push(`sleep performance ${Math.round(summary.sleep.performancePercentage)}%`);
-  if (!facts.length) return null;
-
-  const totalsStr = `${Math.round(totals.calories)} kcal, ${Math.round(totals.protein)}g protein, ${Math.round(totals.carbs)}g carbs, ${Math.round(totals.fat)}g fat logged so far today`;
-  const targetsStr = `${targets.calories.min}-${targets.calories.max} kcal, ${targets.protein.min}-${targets.protein.max}g protein, ${targets.carbs.min}-${targets.carbs.max}g carbs, ${targets.fat.min}-${targets.fat.max}g fat`;
-
-  const content = await getCompletion({
-    source: 'whoopDailyInsight',
-    maxTokens: 100,
-    system: `You write one short, natural-sounding nutrition nudge (max 22 words, one sentence, no markdown, no quotes, no emoji) connecting today's WHOOP recovery/strain/sleep data to what the user should eat next.
-This is contextual guidance, not medical advice — never phrase it as a diagnosis or absolute fact.
-Only reference numbers explicitly given to you. Never invent or estimate WHOOP data that wasn't provided.
-Always return a genuinely useful, specific nudge tied to the real numbers given, even if nothing is alarming.`,
-    user: `WHOOP today: ${facts.join(', ')}.\nMacros so far: ${totalsStr}.\nDaily targets: ${targetsStr}.`,
-  });
-
-  return content.trim().replace(/^"|"$/g, '') || null;
 }
 
 /**

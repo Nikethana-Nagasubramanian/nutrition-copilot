@@ -7,8 +7,7 @@ import { getDailyTargets, getWhoopConfig } from '../db/settings';
 import { addDevLog } from '../services/devLogs';
 import { parseMealDescription } from '../services/openai';
 import { transcribeAudio } from '../services/transcription';
-import { whoopInsightClassName, whoopMealNudge } from '../services/whoop';
-import { useWhoopSmartInsight } from '../hooks/useWhoopSmartInsight';
+import { whoopHomeInsight, whoopInsightClassName, whoopMealNudge } from '../services/whoop';
 import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import type { DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
@@ -953,7 +952,7 @@ export default function Home() {
               ? 'typing'
               : 'idle';
   const composerExpanded = composerUiState === 'typing' || composerUiState === 'transcribed';
-  const whoopInsight = useWhoopSmartInsight(whoopSummary, totals, targets);
+  const whoopInsight = whoopHomeInsight(whoopSummary, totals, targets);
 
   return (
     <div className={`log-paper-screen ${PAGE_CONTAINER_CLASS}`}>

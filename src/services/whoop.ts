@@ -1,4 +1,4 @@
-import type { WhoopConfig, WhoopSummary } from '../types/nutrition';
+import type { DailyTargets, Macros, WhoopConfig, WhoopSummary } from '../types/nutrition';
 
 const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth';
 export const WHOOP_SCOPES = [
@@ -155,22 +155,30 @@ export function whoopInsightTone(summary: WhoopSummary | null | undefined): Whoo
   return 'green';
 }
 
-export function whoopDailyInsight(summary: WhoopSummary | null | undefined): WhoopInsight | null {
+// Home-page insight: "With recovery at x%, strain at y, prioritize protein/carbs."
+// Deterministic (not AI-generated) so the format/wording stays exact and instant.
+export function whoopHomeInsight(
+  summary: WhoopSummary | null | undefined,
+  totals: Macros,
+  targets: DailyTargets
+): WhoopInsight | null {
   if (!summary) return null;
-  const strain = summary.cycle?.strain ?? null;
   const recovery = summary.recovery?.score ?? null;
-  const sleep = summary.sleep?.performancePercentage ?? null;
+  const strain = summary.cycle?.strain ?? null;
+  if (recovery == null && strain == null) return null;
 
-  if (recovery != null && recovery < 45) {
-    return { text: `Low recovery today · ${Math.round(recovery)}%. Keep meals balanced and prioritize protein.`, tone: whoopInsightTone(summary) };
-  }
-  if (strain != null && strain >= 14) {
-    return { text: `High strain today · ${strain.toFixed(1)}. You've used more energy than usual — there's room for more carbs.`, tone: 'yellow' };
-  }
-  if (sleep != null && sleep < 70) {
-    return { text: `Lighter sleep last night · ${Math.round(sleep)}%. Keep meals steady and protein-forward today.`, tone: 'yellow' };
-  }
-  return null;
+  const proteinRatio = targets.protein.max > 0 ? totals.protein / targets.protein.max : 1;
+  const carbsRatio = targets.carbs.max > 0 ? totals.carbs / targets.carbs.max : 1;
+  const priority = proteinRatio <= carbsRatio ? 'protein' : 'carbs';
+
+  const parts: string[] = [];
+  if (recovery != null) parts.push(`recovery at ${Math.round(recovery)}%`);
+  if (strain != null) parts.push(`strain at ${strain.toFixed(1)}`);
+
+  return {
+    text: `With ${parts.join(', ')}, prioritize ${priority}.`,
+    tone: whoopInsightTone(summary),
+  };
 }
 
 export function whoopMealNudge(summary: WhoopSummary | null | undefined, meal: { protein: number; carbs: number; calories: number }): string | null {
