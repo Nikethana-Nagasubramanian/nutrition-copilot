@@ -8,7 +8,8 @@ import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import { addDevLog } from '../services/devLogs';
 import { askNutritionQuestion } from '../services/openai';
 import { transcribeAudio } from '../services/transcription';
-import { whoopDailyInsight, whoopInsightClassName, whoopNutritionContext } from '../services/whoop';
+import { whoopInsightClassName, whoopNutritionContext } from '../services/whoop';
+import { useWhoopSmartInsight } from '../hooks/useWhoopSmartInsight';
 import type { AskNutritionResult, DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
 const ZERO_MACROS: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
@@ -122,7 +123,7 @@ export default function Ask() {
     }
   };
 
-  const whoopInsight = whoopSummary ? whoopDailyInsight(whoopSummary) : null;
+  const whoopInsight = useWhoopSmartInsight(whoopSummary, totals, targets);
 
   return (
     <div className={`log-paper-screen ${PAGE_CONTAINER_CLASS}`}>
