@@ -958,7 +958,7 @@ export default function Home() {
     <div className={`log-paper-screen ${PAGE_CONTAINER_CLASS}`}>
       <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Let's hit those macros</h1>
       {viewMode === 'today' && whoopInsight && (
-        <div className="mt-6 inline-flex flex-col gap-1 rounded-lg border border-[#FEDCC6] bg-[#FFEFE5] px-2.5 py-2">
+        <div className="mt-6 w-full inline-flex flex-col gap-1 rounded-lg border border-[#FEDCC6] bg-[#FFEFE5] px-2.5 py-2">
           <p className="text-[14px] font-medium leading-5 text-[oklch(55.5%_0.163_49)]">{whoopInsight.title}</p>
           {whoopInsight.subtext && (
             <p className="text-[12px] leading-4 text-[oklch(55.5%_0.163_49)]">{whoopInsight.subtext}</p>
