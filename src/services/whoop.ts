@@ -131,54 +131,34 @@ export function whoopNutritionContext(summary: WhoopSummary | null | undefined):
   return parts.length ? parts.join(', ') : null;
 }
 
-export type WhoopInsightTone = 'red' | 'yellow' | 'green';
-export type WhoopInsight = { text: string; tone: WhoopInsightTone };
+export type WhoopHomeInsight = { title: string; subtext: string };
 
-export function whoopInsightClassName(tone: WhoopInsightTone): string {
-  if (tone === 'red') return 'bg-red-50 text-red-700';
-  if (tone === 'yellow') return 'bg-amber-50 text-amber-700';
-  return 'bg-emerald-50 text-emerald-700';
-}
-
-// Matches WHOOP's own recovery banding: red 0-33%, yellow 34-66%, green 67-100%.
-export function whoopInsightTone(summary: WhoopSummary | null | undefined): WhoopInsightTone {
-  const recovery = summary?.recovery?.score ?? null;
-  const strain = summary?.cycle?.strain ?? null;
-  const sleep = summary?.sleep?.performancePercentage ?? null;
-  if (recovery != null) {
-    if (recovery < 34) return 'red';
-    if (recovery < 67) return 'yellow';
-    return 'green';
-  }
-  if (strain != null && strain >= 14) return 'yellow';
-  if (sleep != null && sleep < 70) return 'yellow';
-  return 'green';
-}
-
-// Home-page insight: "With recovery at x%, strain at y, prioritize protein/carbs."
+// Home-page insight: a scannable action header + the raw WHOOP numbers underneath.
 // Deterministic (not AI-generated) so the format/wording stays exact and instant.
 export function whoopHomeInsight(
   summary: WhoopSummary | null | undefined,
   totals: Macros,
   targets: DailyTargets
-): WhoopInsight | null {
+): WhoopHomeInsight | null {
   if (!summary) return null;
   const recovery = summary.recovery?.score ?? null;
   const strain = summary.cycle?.strain ?? null;
+  const sleepHours = summary.sleep?.totalSleepHours ?? null;
+  const sleepPct = summary.sleep?.performancePercentage ?? null;
   if (recovery == null && strain == null) return null;
 
   const proteinRatio = targets.protein.max > 0 ? totals.protein / targets.protein.max : 1;
   const carbsRatio = targets.carbs.max > 0 ? totals.carbs / targets.carbs.max : 1;
-  const priority = proteinRatio <= carbsRatio ? 'protein' : 'carbs';
+  const title =
+    proteinRatio <= carbsRatio ? 'A protein-forward meal would fit well today' : 'You have room for more carbs today';
 
-  const parts: string[] = [];
-  if (recovery != null) parts.push(`recovery at ${Math.round(recovery)}%`);
-  if (strain != null) parts.push(`strain at ${strain.toFixed(1)}`);
+  const subtextParts: string[] = [];
+  if (recovery != null) subtextParts.push(`${Math.round(recovery)}% recovery`);
+  if (strain != null) subtextParts.push(`${strain.toFixed(1)} strain`);
+  if (sleepHours != null && sleepHours > 0) subtextParts.push(`${sleepHours.toFixed(1)}h sleep`);
+  else if (sleepPct != null) subtextParts.push(`${Math.round(sleepPct)}% sleep`);
 
-  return {
-    text: `With ${parts.join(', ')}, prioritize ${priority}.`,
-    tone: whoopInsightTone(summary),
-  };
+  return { title, subtext: subtextParts.join(' · ') };
 }
 
 export function whoopMealNudge(summary: WhoopSummary | null | undefined, meal: { protein: number; carbs: number; calories: number }): string | null {

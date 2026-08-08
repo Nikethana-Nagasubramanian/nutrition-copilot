@@ -7,7 +7,7 @@ import { getDailyTargets, getWhoopConfig } from '../db/settings';
 import { addDevLog } from '../services/devLogs';
 import { parseMealDescription } from '../services/openai';
 import { transcribeAudio } from '../services/transcription';
-import { whoopHomeInsight, whoopInsightClassName, whoopMealNudge } from '../services/whoop';
+import { whoopHomeInsight, whoopMealNudge } from '../services/whoop';
 import { PAGE_CONTAINER_CLASS } from '../lib/layout';
 import type { DailyTargets, LoggedEntry, Macros, WhoopSummary } from '../types/nutrition';
 
@@ -958,9 +958,12 @@ export default function Home() {
     <div className={`log-paper-screen ${PAGE_CONTAINER_CLASS}`}>
       <h1 className="text-[26px] font-semibold leading-[0.96] text-neutral-950">Let's hit those macros</h1>
       {viewMode === 'today' && whoopInsight && (
-        <p className={`mt-2 inline-block rounded-lg px-2.5 py-1 text-sm font-medium leading-5 ${whoopInsightClassName(whoopInsight.tone)}`}>
-          {whoopInsight.text}
-        </p>
+        <div className="mt-2 inline-block rounded-lg border border-[#FEDCC6] bg-[#FFEFE5] px-2.5 py-1">
+          <p className="text-[14px] font-medium leading-5 text-[oklch(55.5%_0.163_49)]">{whoopInsight.title}</p>
+          {whoopInsight.subtext && (
+            <p className="text-[12px] leading-4 text-[oklch(55.5%_0.163_49)]">{whoopInsight.subtext}</p>
+          )}
+        </div>
       )}
 
       <div className="period-tabs mt-8 scroll-mt-[52px]" ref={periodTabsRef}>

@@ -30,11 +30,13 @@ export function AskResultCard({ result, targets }: { result: AskNutritionResult;
       </div>
 
       <div className="px-3">
-        <p className="text-sm font-semibold leading-5 text-neutral-950">{result.summary}</p>
+        <p className="text-sm font-semibold leading-5 text-neutral-950">{result.recommendationTitle}</p>
+        <p className="mt-0.5 text-sm leading-5 text-neutral-600">{result.recommendation}</p>
       </div>
-      {result.suggestion && (
+      {result.whoopInsight && (
         <div className="px-3">
-          <p className="text-sm leading-5 text-neutral-600">{result.suggestion}</p>
+          <p className="text-sm font-semibold leading-5 text-neutral-950">{result.whoopTitle}</p>
+          <p className="mt-0.5 text-sm leading-5 text-neutral-600">{result.whoopInsight}</p>
         </div>
       )}
 

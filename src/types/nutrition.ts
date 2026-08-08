@@ -51,8 +51,10 @@ export interface AskNutritionResult {
   adds: Macros;
   newTotals: Macros;
   remaining: Macros;
-  summary: string;
-  suggestion?: string | null;
+  recommendationTitle: string;
+  recommendation: string;
+  whoopTitle?: string | null;
+  whoopInsight?: string | null;
 }
 
 export interface OllamaConfig {

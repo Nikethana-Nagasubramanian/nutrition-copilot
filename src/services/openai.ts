@@ -79,7 +79,7 @@ export async function askNutritionQuestion(
   const content = await getCompletion({
     source: 'askNutritionQuestion',
     maxTokens: 700,
-    system: `You are a precise nutrition calculator for a personal tracker.
+    system: `You are a precise nutrition calculator for a personal tracker. You write nutrition guidance for a mobile UI. Optimize for scanning, not explanation.
 Rules:
 - If the user asks about a food without quantity, assume exactly one standard serving or one standard package.
 - Do not assume extra servings, add-ons, eggs, sides, or toppings unless named.
@@ -92,25 +92,32 @@ Rules:
   "adds": { "calories": number, "protein": number, "carbs": number, "fat": number },
   "newTotals": { "calories": number, "protein": number, "carbs": number, "fat": number },
   "remaining": { "calories": number, "protein": number, "carbs": number, "fat": number },
-  "summary": string,
-  "suggestion": string | null
+  "recommendationTitle": string,
+  "recommendation": string,
+  "whoopTitle": string | null,
+  "whoopInsight": string | null
 }
 
-"summary" (1-2 short sentences):
-- If a concrete tweak to what the user asked (different quantity, an added/swapped side, more protein) would fit their day meaningfully better, phrase it as a specific alternative: "Consider [tweaked meal] instead (~X kcal, Yg protein, Zg carbs, Wg fat), which [fits comfortably / is still tight / etc.]."
-- Otherwise, just give the direct answer for exactly what they asked.
+"recommendationTitle" (max 6 words) + "recommendation" (max 2 sentences, max 30 words):
+- Title states the action, dynamically, based on what's actually true this time — do not default to any fixed phrase. Examples of the range: "Consider 1 Buldak + 4 eggs instead", "This fits well today", "Consider a smaller portion", "Add a protein source", "Swap one Buldak for...". Pick whichever fits this specific case.
+- Body explains why in one breath, leading with the action's effect, not a restatement of the meal.
+- Do not repeat calorie/macro totals verbatim (they're already shown elsewhere in the UI) — reference what's short or over only if it changes the recommendation.
 
-"suggestion" (1-2 short sentences, natural tone, not clinical):
-- Name whichever macro (protein/carbs/fat) is most short or most over relative to today's remaining targets, with the actual gram amount.
-- If WHOOP context is provided, weave it in naturally where it actually changes the read — e.g. high strain justifies more carbs; low recovery or poor sleep favors protein-forward, steady meals; solid recovery/sleep is worth a brief mention when relevant. Never state WHOOP numbers that weren't given to you, and never present this as medical advice.
-- If no WHOOP context is available, base this purely on the macro-balance read.
+"whoopTitle" (max 6 words) + "whoopInsight" (max 2 sentences, max 30 words):
+- Only set these if WHOOP context is provided; otherwise both must be null.
+- Title names which specific signal is driving the read, dynamically: "Based on your recovery", "Based on your strain", "Based on your sleep", "Based on today's activity". If more than one signal meaningfully matters together, use "Based on your body today".
+- Body explains how that WHOOP signal changes (or doesn't change) what to eat next. Mention at most 2 relevant numbers. If WHOOP data doesn't materially change the recommendation, say so briefly rather than inventing significance.
+- Never state WHOOP numbers that weren't given to you. Never present this as medical advice — contextual guidance only.
 
-Remaining values may be negative when over target.`,
+General:
+- Lead with the action, not the reasoning, in both sections.
+- No filler, disclaimers, or generic nutrition advice.
+- Remaining values may be negative when over target.`,
     user: `Today so far: ${todayTotals}\nDaily targets: ${targets}\nWHOOP context: ${whoopContext || 'not connected or not synced'}\nQuestion: ${question}`,
   });
 
   const parsed = extractJson(content) as AskNutritionResult;
-  if (!parsed.verdict || !parsed.adds || !parsed.newTotals || !parsed.remaining) {
+  if (!parsed.verdict || !parsed.adds || !parsed.newTotals || !parsed.remaining || !parsed.recommendationTitle || !parsed.recommendation) {
     throw new Error('AI response was missing expected ask fields.');
   }
   return parsed;
